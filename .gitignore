@@ -26,3 +26,6 @@ dist/
 
 # Environment variables
 .env
+
+# Audio test files
+*.m4a
