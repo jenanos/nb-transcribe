@@ -3,3 +3,4 @@ torch==2.7.1+cu118
 transformers>=4.35.2
 soundfile
 torchaudio
+pillow>=9.0.0
