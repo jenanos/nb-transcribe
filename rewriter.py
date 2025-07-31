@@ -1,65 +1,69 @@
-from transformers import AutoProcessor, Gemma3ForConditionalGeneration
-# AutoProcessor for Gemma-3 may require PIL for image inputs
-try:
-    from PIL import Image
-except ImportError:
-    raise ImportError("Pillow library not found. Please install it with `pip install pillow` and restart.")
+from transformers import AutoTokenizer, pipeline
 import torch
+import re
 
 
 def create_rewriter_pipeline(
     model_name: str = "google/gemma-3-4b-it"
 ):
-    """Oppretter rewriter med Google Gemma-3 4B og AutoProcessor for chat.
-    Modellen lastes med fp16 og flyttes direkte til enkelt GPU uten accelerate.
-    Krever transformers>=4.50.0 og gyldig HF-CLI autentisering.
-    """
+    """Oppretter pipeline for tekstomskriving med Gemma-3 4B IT."""
     if not torch.cuda.is_available():
         raise RuntimeError("Ingen CUDA‑enhet funnet for rewriter.")
-    # Last processor for chat templating
-    processor = AutoProcessor.from_pretrained(
-        model_name,
-        use_fast=True
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+    pipe = pipeline(
+        "text-generation",
+        model=model_name,
+        tokenizer=tokenizer,
+        device="cuda",
+        torch_dtype=torch.bfloat16
     )
-    # Last modell med fp16 og lavt CPU-minne, så flytt manuelt til GPU
-    model = Gemma3ForConditionalGeneration.from_pretrained(
-        model_name,
-        torch_dtype=torch.bfloat16,
-        low_cpu_mem_usage=True
-    )
-    model = model.to("cuda:0")
-    model.eval()
-    return model, processor
+    return pipe, tokenizer
 
 
-def rewrite_text(model_processor, text: str) -> str:
-    """Renskriver råtekst med Gemma-3 via chat-template og AutoProcessor."""
-    model, processor = model_processor
-    # Bygg messages
+def extract_model_response(text: str) -> str:
+    """Returnerer kun tekst etter <start_of_turn>model og før <end_of_turn>."""
+    match = re.search(r"<start_of_turn>model(.*?)(?:<end_of_turn>|$)", text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return text.strip()
+
+
+def rewrite_text(pipe_tokenizer, text: str, mode: str = "summary") -> str:
+    """Renskriver råtekst med Gemma-3 via chat-template og pipeline-API."""
+    pipe, tokenizer = pipe_tokenizer
+    # Dynamisk system-prompt basert på mode
+    if mode == 'summary':
+        system_text = (
+            "Du er en hjelpende assistent som oppsummerer samtaler. "
+            "Fjern gjentakelser og lever en konsis oppsummering uten å gi tilbakemeldinger eller ros."
+        )
+    elif mode == 'email':
+        system_text = (
+            "Du er en profesjonell assistent som skriver eposter. "
+            "Lag en faglig og profesjonell epost basert på transkripsjonen uten å legge til nye detaljer, "
+            "og uten å gi tilbakemeldinger eller ros."
+        )
+    elif mode == 'document':
+        system_text = (
+            "Du er en profesjonell assistent for offentlige dokumenter. "
+            "Generer tekst i korte setninger uten overflødige kommentarer, "
+            "og uten å gi tilbakemeldinger eller ros."
+        )
+    else:
+        system_text = (
+            "Du er en hjelpsom assistent. "
+            "Utfør omskriving uten å gi tilbakemeldinger eller ros."
+        )
+
     messages = [
-        {"role": "system", "content": [{"type": "text", "text": "Du er en hjelpsom assistent som skal hjelpe meg med å renskrive følgende tekst:."}]},
+        {"role": "system", "content": [{"type": "text", "text": system_text}]},
         {"role": "user",   "content": [{"type": "text", "text": text}]}
     ]
-    # Forbered inputs med chat-templating
-    inputs = processor.apply_chat_template(
+    prompt = tokenizer.apply_chat_template(
         messages,
         add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt"
-    ).to(model.device, dtype=torch.bfloat16)
-
-    # Generer uten sampling
-    with torch.inference_mode():
-        generation = model.generate(
-            **inputs,
-            max_new_tokens=1024,
-            do_sample=False,
-            num_beams=4
-        )
-    # Fjern prompt tokens
-    input_len = inputs["input_ids"].shape[-1]
-    gen_tokens = generation[0][input_len:]
-    # Decode til tekst
-    decoded = processor.decode(gen_tokens, skip_special_tokens=True)
-    return decoded
+        tokenize=False
+    )
+    output = pipe(prompt, max_new_tokens=1024, do_sample=False, num_beams=4)
+    raw_result = output[0]["generated_text"]
+    return extract_model_response(raw_result)

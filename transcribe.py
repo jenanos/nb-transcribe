@@ -32,15 +32,14 @@ def create_asr_pipeline(batch_size: int = 4):
 
 
 def to_wav(input_path: str, sampling_rate: int = 16000) -> str:
-    """Konverterer inputfil til WAV (mono, 16 kHz). Sikrer at FFmpeg er satt."""
+    """Konverterer inputfil til WAV (mono, 16 kHz)."""
     ensure_ffmpeg()
     fd, wav_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     subprocess.run([
         os.environ["FFMPEG_BINARY"],
         "-y", "-i", input_path,
-        "-ar", str(sampling_rate),
-        "-ac", "1", wav_path
+        "-ar", str(sampling_rate), "-ac", "1", wav_path
     ], check=True)
     return wav_path
 
