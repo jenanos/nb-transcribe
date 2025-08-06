@@ -1,6 +1,7 @@
 from transformers import AutoTokenizer, pipeline
 import torch
 import re
+import os
 
 
 def create_rewriter_pipeline(
@@ -9,14 +10,16 @@ def create_rewriter_pipeline(
     """Oppretter pipeline for tekstomskriving med Gemma-3 4B IT."""
     if not torch.cuda.is_available():
         raise RuntimeError("Ingen CUDA‑enhet funnet for rewriter.")
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, token=os.environ.get("HF_TOKEN"))
     pipe = pipeline(
         "text-generation",
         model=model_name,
         tokenizer=tokenizer,
         device="cuda",
-        torch_dtype=torch.bfloat16
+        torch_dtype=torch.bfloat16,
+        token=os.environ.get("HF_TOKEN")
     )
+
     return pipe, tokenizer
 
 
