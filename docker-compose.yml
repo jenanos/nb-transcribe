@@ -1,0 +1,28 @@
+version: "3.9"
+
+networks:
+  internal_app: {}
+  cf_edge:
+    external: true
+
+services:
+  backend:
+    build: ./backend
+    container_name: nb-transcribe-backend
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    networks: [internal_app]
+
+  frontend:
+    build: ./frontend
+    container_name: nb-transcribe-frontend
+    depends_on:
+      - backend
+    networks: [internal_app, cf_edge]

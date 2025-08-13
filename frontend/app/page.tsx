@@ -22,19 +22,19 @@ export default function Home() {
     formData.append("rewrite", String(rewrite));
 
     try {
-      const res = await fetch("https://jenanos.xyz/process/", {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) throw new Error("Noe gikk galt på serveren.");
+      const res = await fetch("/api/process/", { method: "POST", body: formData });
+      if (!res.ok) {
+        const text = await res.text();           // <- se hva backend/proxy faktisk sier
+        throw new Error(`${res.status} ${res.statusText} – ${text}`);
+      }
       const data = await res.json();
       setResult(data);
     } catch (err: any) {
       setError(err.message || "Ukjent feil");
-    } finally {
-      setLoading(false);
     }
   }
+
+
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-300 flex flex-col items-center justify-center p-4">

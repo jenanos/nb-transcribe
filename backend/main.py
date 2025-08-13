@@ -10,14 +10,6 @@ from rewriter import create_rewriter_pipeline, rewrite_text
 
 app = FastAPI()
 
-# Tillat frontend på localhost:3000
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://jenanos.xyz"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @app.post("/process/")
 async def process(
