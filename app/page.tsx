@@ -22,7 +22,7 @@ export default function Home() {
     formData.append("rewrite", String(rewrite));
 
     try {
-      const res = await fetch("http://localhost:8000/process/", {
+      const res = await fetch("https://jenanos.xyz/process/", {
         method: "POST",
         body: formData,
       });
