@@ -4,28 +4,37 @@ from fastapi.responses import JSONResponse
 import tempfile
 import os
 import torch
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
+from typing import Dict, Any, Optional
 
 from transcribe import create_asr_pipeline, to_wav, segment_wav, transcribe_segments
 from rewriter import create_rewriter_pipeline, rewrite_text
 
+# ---------------------------
+# 1) Opprett app TIDLIG
+# ---------------------------
 app = FastAPI()
 
+# CORS er ikke nødvendig når du proxier via Next.js, men det skader ikke å la stå
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "https://jenanos.xyz"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.post("/process/")
-async def process(
-    file: UploadFile = File(...),
-    mode: str = Form("summary"),
-    rewrite: bool = Form(True)
-):
-    # Lagre midlertidig fil
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
-
-    wav = to_wav(tmp_path)
+# ---------------------------
+# 2) Felles transkriberingsfunksjon
+# ---------------------------
+def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[str, Optional[str]]:
+    """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
+    wav = to_wav(input_path)
     segments = segment_wav(wav, 30)
 
-    # 1. Last ASR-modellen, bruk og frigjør
+    # ASR
     asr = create_asr_pipeline()
     raw_transcript = transcribe_segments(asr, segments)
     del asr
@@ -33,16 +42,76 @@ async def process(
 
     clean_transcript = None
     if rewrite:
-        # 2. Last rewriter-modellen, bruk og frigjør
         rewriter = create_rewriter_pipeline()
         clean_transcript = rewrite_text(rewriter, raw_transcript, mode)
         del rewriter
         torch.cuda.empty_cache()
 
-    # Rydd opp
+    # Rydd opp midlertidige filer
     for seg in segments:
         os.remove(seg)
     os.remove(wav)
-    os.remove(tmp_path)
+    os.remove(input_path)
 
-    return JSONResponse({"raw": raw_transcript, "clean": clean_transcript})
+    return {"raw": raw_transcript, "clean": clean_transcript}
+
+# ---------------------------
+# 3) Synkront endepunkt (nyttig lokalt / uten Cloudflare)
+# ---------------------------
+@app.post("/process/")
+async def process(
+    file: UploadFile = File(...),
+    mode: str = Form("summary"),
+    rewrite: bool = Form(True)
+):
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    result = run_transcribe_pipeline(tmp_path, mode, rewrite)
+    return JSONResponse(result)
+
+# ---------------------------
+# 4) Enkel "jobbkø" i minne + async endepunkt (for Cloudflare)
+# ---------------------------
+executor = ThreadPoolExecutor(max_workers=1)  # kjør én jobb om gangen (GPU)
+JOBS: Dict[str, Dict[str, Any]] = {}         # {job_id: {status, result, error}}
+
+def _submit_job(file_path: str, mode: str, rewrite: bool, job_id: str):
+    try:
+        JOBS[job_id]["status"] = "running"
+        result = run_transcribe_pipeline(file_path, mode, rewrite)
+        JOBS[job_id]["status"] = "done"
+        JOBS[job_id]["result"] = result
+    except Exception as e:
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error"] = str(e)
+
+@app.post("/jobs")
+async def create_job(
+    file: UploadFile = File(...),
+    mode: str = Form("summary"),
+    rewrite: bool = Form(True)
+):
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    job_id = str(uuid4())
+    JOBS[job_id] = {"status": "queued", "result": None, "error": None}
+
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(executor, _submit_job, tmp_path, mode, rewrite, job_id)
+
+    return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)
+
+@app.get("/jobs/{job_id}")
+async def get_job(job_id: str):
+    job = JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if job["status"] == "done":
+        return JSONResponse({"status": "done", "result": job["result"]})
+    if job["status"] == "error":
+        return JSONResponse({"status": "error", "error": job["error"]}, status_code=500)
+    return JSONResponse({"status": job["status"]})

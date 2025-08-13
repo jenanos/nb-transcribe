@@ -22,17 +22,46 @@ export default function Home() {
     formData.append("rewrite", String(rewrite));
 
     try {
-      const res = await fetch("/api/process/", { method: "POST", body: formData });
-      if (!res.ok) {
-        const text = await res.text();           // <- se hva backend/proxy faktisk sier
-        throw new Error(`${res.status} ${res.statusText} – ${text}`);
+      // 1) Opprett jobb (får job_id)
+      const create = await fetch("/api/jobs", { method: "POST", body: formData });
+      if (!(create.status === 202 || create.status === 200)) {
+        const t = await create.text();
+        throw new Error(`${create.status} ${create.statusText} – ${t}`);
       }
-      const data = await res.json();
-      setResult(data);
+      const { job_id } = await create.json();
+
+      // 2) Poll status
+      const poll = async () => {
+        const res = await fetch(`/api/jobs/${job_id}`);
+        const data = await res.json();
+        if (data.status === "done") {
+          setResult(data.result);
+          setLoading(false);
+          return true;
+        }
+        if (data.status === "error") {
+          throw new Error(data.error || "Ukjent job-feil");
+        }
+        return false;
+      };
+
+      // poll hvert 2. sekund til ferdig
+      const interval = setInterval(async () => {
+        try {
+          const done = await poll();
+          if (done) clearInterval(interval);
+        } catch (err: any) {
+          clearInterval(interval);
+          setError(err.message || "Ukjent feil");
+          setLoading(false);
+        }
+      }, 2000);
     } catch (err: any) {
       setError(err.message || "Ukjent feil");
+      setLoading(false);
     }
   }
+
 
 
 
