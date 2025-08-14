@@ -1,3 +1,5 @@
+DEV_STUB = os.environ.get("DEV_STUB") == "1"
+
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -30,6 +32,15 @@ app.add_middleware(
 # 2) Felles transkriberingsfunksjon
 # ---------------------------
 def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[str, Optional[str]]:
+
+    if DEV_STUB:
+        os.remove(input_path)
+        return {
+            "raw": "[DEV] Stub råtranskripsjon",
+            "clean": "[DEV] Stub renskrevet tekst"
+    }
+
+
     """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
     wav = to_wav(input_path)
     segments = segment_wav(wav, 30)
