@@ -1,7 +1,80 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import bgImage from "@/public/nb-transcribe-background.png"; // Plasser bildet i public/
+import bgImage from "@/public/nb-transcribe-background.png";
+
+function CopyableEditableBox({
+  title,
+  content,
+}: {
+  title: string;
+  content: string;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [text, setText] = useState(content);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleSave = () => {
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="relative p-4 rounded-xl bg-black/60 backdrop-blur-md border border-white/10">
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="font-orbitron text-xl text-pink-400">{title}</h3>
+        <div className="flex gap-2">
+          <button
+            onClick={handleCopy}
+            className="text-cyan-300 hover:text-white transition-colors"
+            title="Kopier"
+          >
+            📋
+          </button>
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-cyan-300 hover:text-white transition-colors"
+              title="Rediger"
+            >
+              ✏️
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isEditing ? (
+        <div>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={8}
+            className="w-full p-2 bg-black/50 text-white border border-pink-400 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-400"
+          />
+          <button
+            onClick={handleSave}
+            className="mt-2 px-4 py-2 bg-pink-500 rounded hover:bg-pink-600"
+          >
+            Lagre
+          </button>
+        </div>
+      ) : (
+        <pre className="whitespace-pre-wrap">{text}</pre>
+      )}
+
+      {copied && (
+        <div className="absolute top-2 right-12 bg-cyan-500 text-black px-2 py-1 rounded text-sm">
+          Kopiert!
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -64,51 +137,57 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col text-white font-sans">
-      {/* Bakgrunn kun for opplastingssiden */}
-      {page === "upload" && (
-        <div className="absolute inset-0 -z-10">
-          <Image
-            src={bgImage}
-            alt="Synthwave background"
-            fill
-            style={{ objectFit: "cover" }}
-          />
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-        </div>
-      )}
+    <div className="min-h-screen flex flex-col text-white font-sans relative">
+      {/* Bakgrunn på begge sider */}
+      <div className="absolute inset-0 -z-10">
+        <Image src={bgImage} alt="Synthwave background" fill style={{ objectFit: "cover" }} />
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+      </div>
 
       {/* Opplastingsside */}
       {page === "upload" && (
-        <main className="flex-grow flex flex-col justify-center items-center p-6 space-y-6">
-          <h1 className="font-orbitron text-4xl text-pink-400 drop-shadow-[0_0_10px_#ff33a8]">
-            Transkriber
+        <main className="flex-grow flex flex-col items-center p-6 space-y-6">
+          {/* Flashy tittel */}
+          <h1 className="font-road-rage text-6xl md:text-7xl bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-400 bg-clip-text text-transparent glow-pulse animate-gradient text-center mt-6">
+            NB-transcribe
           </h1>
+          {/* Undertittel */}
+          <h2 className="font-orbitron text-2xl text-cyan-300 drop-shadow-[0_0_5px_#00e5ff] mb-4">
+            Opplasting
+          </h2>
+
+          {/* Skjema */}
           <form
             onSubmit={handleSubmit}
             className="w-full max-w-md p-6 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 space-y-6"
           >
+            {/* Custom file upload */}
             <div>
-              <label className="font-orbitron text-lg text-cyan-300" htmlFor="upload-file">
-                Last opp lydfil
+              <label className="font-orbitron text-lg text-cyan-300">Last opp lydfil</label>
+              <label
+                htmlFor="upload-file"
+                className="mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed border-pink-400 rounded-md cursor-pointer hover:border-cyan-400 transition-colors"
+              >
+                <span className="text-center text-pink-400">
+                  {file ? file.name : "Klikk for å velge fil eller dra og slipp"}
+                </span>
               </label>
               <input
+                id="upload-file"
                 type="file"
                 accept="audio/*"
-                onChange={e => setFile(e.target.files?.[0] || null)}
-                className="mt-2 block w-full text-white border border-pink-400 rounded px-3 py-2 bg-black/50 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="hidden"
                 required
               />
             </div>
 
+            {/* Mode */}
             <div>
-              <label className="font-orbitron text-lg text-cyan-300" htmlFor="mode">
-                Type omskriving
-              </label>
+              <label className="font-orbitron text-lg text-cyan-300">Type omskriving</label>
               <select
-                id="mode"
                 value={mode}
-                onChange={e => setMode(e.target.value)}
+                onChange={(e) => setMode(e.target.value)}
                 className="mt-2 block w-full pl-3 pr-10 py-3 rounded-md bg-black/50 text-white border border-pink-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
               >
                 <option value="summary">Sammendrag</option>
@@ -117,16 +196,18 @@ export default function Home() {
               </select>
             </div>
 
+            {/* Rewrite */}
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={rewrite}
-                onChange={e => setRewrite(e.target.checked)}
+                onChange={(e) => setRewrite(e.target.checked)}
                 className="accent-pink-500"
               />
               <span>Renskriv med Gemma-3</span>
             </label>
 
+            {/* Submit */}
             <button
               type="submit"
               className="w-full py-3 rounded-lg bg-pink-500 text-white font-bold shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
@@ -141,21 +222,16 @@ export default function Home() {
 
       {/* Resultatside */}
       {page === "results" && (
-        <main className="flex-grow p-6 space-y-6 bg-gradient-to-br from-gray-900 to-black">
-          <h1 className="font-orbitron text-4xl text-center text-cyan-300 drop-shadow-[0_0_10px_#00e5ff]">
+        <main className="flex-grow p-6 space-y-6">
+          {/* Undertittel */}
+          <h2 className="font-orbitron text-2xl text-cyan-300 drop-shadow-[0_0_5px_#00e5ff] text-center">
             Resultater
-          </h1>
+          </h2>
           {result && (
-            <div className="w-full max-w-3xl mx-auto p-6 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 space-y-6">
-              <div>
-                <h2 className="font-orbitron text-xl text-pink-400 mb-3">Transkripsjon</h2>
-                <p className="whitespace-pre-wrap">{result.raw}</p>
-              </div>
+            <div className="w-full max-w-3xl mx-auto space-y-6">
+              <CopyableEditableBox title="Transkripsjon" content={result.raw} />
               {result.clean && (
-                <div>
-                  <h2 className="font-orbitron text-xl text-cyan-300 mb-3">Omskrevet versjon</h2>
-                  <p className="whitespace-pre-wrap">{result.clean}</p>
-                </div>
+                <CopyableEditableBox title="Omskrevet versjon" content={result.clean} />
               )}
             </div>
           )}
