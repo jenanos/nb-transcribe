@@ -1,5 +1,3 @@
-DEV_STUB = os.environ.get("DEV_STUB") == "1"
-
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,9 +8,10 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 from typing import Dict, Any, Optional
-
 from transcribe import create_asr_pipeline, to_wav, segment_wav, transcribe_segments
 from rewriter import create_rewriter_pipeline, rewrite_text
+
+DEV_STUB = os.environ.get("DEV_STUB") == "1"
 
 # ---------------------------
 # 1) Opprett app TIDLIG
