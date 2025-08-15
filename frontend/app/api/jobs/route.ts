@@ -1,5 +1,5 @@
 export const runtime = "nodejs";
-const BASE = process.env.BACKEND_URL || "http://localhost:8000";
+const BASE = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 
 export async function POST(req: Request) {
   const upstream = await fetch(`${BASE}/jobs`, {
