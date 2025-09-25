@@ -23,9 +23,11 @@ def main():
         help="Navn på gated rewriter-modell (~1B)"
     )
     parser.add_argument(
-        "--mode", choices=["summary", "email", "document"],
+        "--mode", choices=["summary", "email", "document", "talking_points", "polish"],
         default="summary",
-        help="Velg type renskriving: 'summary', 'email', eller 'document'"
+        help=(
+            "Velg type renskriving: 'summary', 'email', 'document', 'talking_points' eller 'polish'"
+        )
     )
     args = parser.parse_args()
 

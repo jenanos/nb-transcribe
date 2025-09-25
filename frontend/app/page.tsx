@@ -192,7 +192,9 @@ export default function Home() {
               >
                 <option value="summary">Sammendrag</option>
                 <option value="email">E-post</option>
-                <option value="document">Dokument</option>
+                <option value="document">Avsnitt til dokument</option>
+                <option value="talking_points">Talepunkter</option>
+                <option value="polish">Renskriving</option>
               </select>
             </div>
 
