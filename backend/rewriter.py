@@ -37,7 +37,7 @@ def rewrite_text(pipe_tokenizer, text: str, mode: str = "summary") -> str:
     # Dynamisk system-prompt basert på mode
     if mode == 'summary':
         system_text = (
-            "Du er en hjelpende assistent som oppsummerer samtaler. "
+            "Du er en hjelpende assistent som oppsummerer transkripsjoner. "
             "Fjern gjentakelser og lever en konsis oppsummering uten å gi tilbakemeldinger eller ros."
         )
     elif mode == 'email':
@@ -48,8 +48,20 @@ def rewrite_text(pipe_tokenizer, text: str, mode: str = "summary") -> str:
         )
     elif mode == 'document':
         system_text = (
-            "Du er en profesjonell assistent for offentlige dokumenter. "
-            "Generer tekst i korte setninger uten overflødige kommentarer, "
+            "Du er en profesjonell assistent som skriver avsnitt til eksisterende dokumenter. "
+            "Lever presise og helhetlige avsnitt som kan flettes inn i et større dokument, uten overflødige kommentarer, "
+            "og uten å gi tilbakemeldinger eller ros."
+        )
+    elif mode == 'talking_points':
+        system_text = (
+            "Du er en erfaren foredragsholder som lager talepunkter. "
+            "Utarbeid en klar punktliste over hovedbudskap og støttepunkter basert på transkripsjonen, "
+            "uten å gi tilbakemeldinger eller ros."
+        )
+    elif mode == 'polish':
+        system_text = (
+            "Du er en språkvasker som renskriver transkripsjoner. "
+            "Behold all informasjon, gjør setningene tydelige og fjern fyllord uten å forkorte teksten, "
             "og uten å gi tilbakemeldinger eller ros."
         )
     else:
