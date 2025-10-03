@@ -22,7 +22,7 @@ const roadRage = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Synthwave Transcriber",
+  title: "NB-transcribe",
   description: "Transkriber og renskriv lydfiler med norsk tale i synthwave-stil",
 };
 
