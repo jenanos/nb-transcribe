@@ -1,0 +1,6 @@
+# Minimal deps to run backend unit tests in DEV_STUB mode (no GPU / torch needed)
+fastapi
+starlette
+httpx
+pytest
+python-multipart

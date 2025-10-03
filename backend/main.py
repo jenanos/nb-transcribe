@@ -3,13 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import tempfile
 import os
-import torch
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 from typing import Dict, Any, Optional
-from transcribe import create_asr_pipeline, to_wav, segment_wav, transcribe_segments
-from rewriter import create_rewriter_pipeline, rewrite_text
 
 DEV_STUB = os.environ.get("DEV_STUB") == "1"
 
@@ -31,16 +28,26 @@ app.add_middleware(
 # 2) Felles transkriberingsfunksjon
 # ---------------------------
 def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[str, Optional[str]]:
+    """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
 
+    # Lettvekts stub for lokal utvikling og tester
     if DEV_STUB:
         os.remove(input_path)
         return {
             "raw": "[DEV] Stub råtranskripsjon",
-            "clean": "[DEV] Stub renskrevet tekst"
-    }
+            "clean": "[DEV] Stub renskrevet tekst",
+        }
 
+    # Importer tunge avhengigheter kun når vi faktisk trenger dem
+    from transcribe import (
+        create_asr_pipeline,
+        to_wav,
+        segment_wav,
+        transcribe_segments,
+    )
+    from rewriter import create_rewriter_pipeline, rewrite_text
+    import torch  # type: ignore[import-not-found]
 
-    """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
     wav = to_wav(input_path)
     segments = segment_wav(wav, 30)
 

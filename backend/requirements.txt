@@ -9,3 +9,5 @@ bitsandbytes
 fastapi 
 uvicorn 
 python-multipart
+pytest
+httpx
