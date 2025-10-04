@@ -14,6 +14,9 @@ describe("Home page", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Last opp lydfil")).toBeInTheDocument();
     expect(
+      screen.getByRole("option", { name: "Arbeidsflyt" })
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Start Transkribering" })
     ).toBeInTheDocument();
   });

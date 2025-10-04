@@ -4,14 +4,34 @@ import Image from "next/image";
 import CopyableEditableBox from "@/app/components/CopyableEditableBox";
 import bgImage from "@/public/nb-transcribe-background.png";
 
+const MODE_OPTIONS = [
+  { value: "summary", label: "Sammendrag" },
+  { value: "email", label: "E-post" },
+  { value: "document", label: "Avsnitt til dokument" },
+  { value: "talking_points", label: "Talepunkter" },
+  { value: "polish", label: "Renskriving" },
+  { value: "workflow", label: "Arbeidsflyt" },
+];
+
+const CLEAN_TITLES: Record<string, string> = {
+  summary: "Omskrevet versjon",
+  email: "E-postutkast",
+  document: "Dokumentavsnitt",
+  talking_points: "Talepunkter",
+  polish: "Renskrevet versjon",
+  workflow: "Arbeidsflyt og LLM-promptforslag",
+};
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState("summary");
+  const [mode, setMode] = useState<string>(MODE_OPTIONS[0].value);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ raw: string; clean: string } | null>(null);
+  const [result, setResult] = useState<{ raw: string; clean: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rewrite, setRewrite] = useState(true);
   const [page, setPage] = useState<"upload" | "results">("upload");
+  const [lastMode, setLastMode] = useState<string>(MODE_OPTIONS[0].value);
+  const cleanTitle = CLEAN_TITLES[lastMode] ?? "Omskrevet versjon";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,10 +40,12 @@ export default function Home() {
     setError(null);
     setResult(null);
 
+    const selectedMode = mode;
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("mode", mode);
+    formData.append("mode", selectedMode);
     formData.append("rewrite", String(rewrite));
+    setLastMode(selectedMode);
 
     try {
       const create = await fetch("/api/jobs", { method: "POST", body: formData });
@@ -37,7 +59,12 @@ export default function Home() {
         const res = await fetch(`/api/jobs/${job_id}`);
         const data = await res.json();
         if (data.status === "done") {
-          setResult(data.result);
+          const raw = data?.result?.raw ?? "";
+          const cleanValue = data?.result?.clean;
+          setResult({
+            raw,
+            clean: typeof cleanValue === "string" ? cleanValue : null,
+          });
           setLoading(false);
           setPage("results");
           return true;
@@ -118,11 +145,11 @@ export default function Home() {
                 onChange={(e) => setMode(e.target.value)}
                 className="mt-2 block w-full pl-3 pr-10 py-3 rounded-md bg-black/50 text-white border border-pink-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
               >
-                <option value="summary">Sammendrag</option>
-                <option value="email">E-post</option>
-                <option value="document">Avsnitt til dokument</option>
-                <option value="talking_points">Talepunkter</option>
-                <option value="polish">Renskriving</option>
+                {MODE_OPTIONS.map(({ value: optionValue, label }) => (
+                  <option key={optionValue} value={optionValue}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -161,7 +188,7 @@ export default function Home() {
             <div className="w-full max-w-3xl mx-auto space-y-6">
               <CopyableEditableBox title="Transkripsjon" content={result.raw} />
               {result.clean && (
-                <CopyableEditableBox title="Omskrevet versjon" content={result.clean} />
+                <CopyableEditableBox title={cleanTitle} content={result.clean} />
               )}
             </div>
           )}

@@ -61,8 +61,23 @@ def rewrite_text(pipe_tokenizer, text: str, mode: str = "summary") -> str:
     elif mode == 'polish':
         system_text = (
             "Du er en språkvasker som renskriver transkripsjoner. "
-            "Behold all informasjon, gjør setningene tydelige og fjern fyllord uten å forkorte teksten, "
-            "og uten å gi tilbakemeldinger eller ros."
+            "Behold all informasjon, gjør setningene tydelige og fjern muntlige fyllord. "
+            "Fjern uttrykk som 'eh', 'øh', 'ehhh', 'liksom', 'ikke sant', 'altså', 'på en måte' og lignende, selv om teksten blir litt kortere, "
+            "og ikke legg til tilbakemeldinger eller ros."
+        )
+    elif mode == 'workflow':
+        system_text = (
+            "Du er en arbeidsflyt-assistent som analyserer en transkripsjon. "
+            "Identifiser hvert konkrete handlingspunkt eller oppgave som nevnes. "
+            "For hver oppgave: oppgi en kort beskrivelse og lag en presis prompt som kan gis til et annet LLM-verktøy "
+            "for å utføre oppgaven. Inkluder relevante detaljer, mål, avhengigheter, personer og kontekst fra transkripsjonen. "
+            "Svar på norsk og formater resultatet som en nummerert liste med blokker på formatet:\n"
+            "Oppgave X: <kort beskrivelse>\n"
+            "Prompt:\n"
+            "\"\"\"\n"
+            "<prompttekst>\n"
+            "\"\"\"\n"
+            "Ikke legg til vurderinger, konklusjoner eller tekst som ikke følger strukturen."
         )
     else:
         system_text = (

@@ -33,9 +33,25 @@ def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[s
     # Lettvekts stub for lokal utvikling og tester
     if DEV_STUB:
         os.remove(input_path)
+        clean_stub_map = {
+            "summary": "[DEV] Stub sammendrag av transkripsjonen",
+            "email": "[DEV] Stub e-post basert på transkripsjonen",
+            "document": "[DEV] Stub avsnitt til dokument",
+            "talking_points": "[DEV] Stub talepunkter",
+            "polish": "[DEV] Stub renskrevet tekst",
+            "workflow": (
+                "[DEV] Stub arbeidsflyt\n"
+                "Oppgave 1: Følg opp Geir om status på prosjektet.\n"
+                "Prompt:\n"
+                "\"\"\"\n"
+                "Du er en assistent som skriver en e-post til Geir. Oppsummer status og be om oppdatering.\n"
+                "\"\"\""
+            ),
+        }
+        clean_text = clean_stub_map.get(mode, "[DEV] Stub renskrevet tekst") if rewrite else None
         return {
             "raw": "[DEV] Stub råtranskripsjon",
-            "clean": "[DEV] Stub renskrevet tekst",
+            "clean": clean_text,
         }
 
     # Importer tunge avhengigheter kun når vi faktisk trenger dem
