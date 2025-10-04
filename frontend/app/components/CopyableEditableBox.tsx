@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type CopyableEditableBoxProps = {
   title: string;
@@ -14,6 +14,17 @@ export default function CopyableEditableBox({
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(content);
   const [copied, setCopied] = useState(false);
+  const lastContentRef = useRef(content);
+
+  useEffect(() => {
+    if (!isEditing && content !== lastContentRef.current) {
+      lastContentRef.current = content;
+      setText(content);
+      return;
+    }
+
+    lastContentRef.current = content;
+  }, [content, isEditing]);
 
   const handleCopy = async () => {
     try {

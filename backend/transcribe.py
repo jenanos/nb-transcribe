@@ -44,7 +44,7 @@ def to_wav(input_path: str, sampling_rate: int = 16000) -> str:
     return wav_path
 
 
-def segment_wav(wav_path: str, segment_length_s: int = 30) -> list[str]:
+def segment_wav(wav_path: str, segment_length_s: int = 30) -> tuple[list[str], str]:
     """Splitter WAV-filen i segmenter av gitt lengde (sekunder)."""
     data, sr = sf.read(wav_path)
     samples_per_seg = int(segment_length_s * sr)
@@ -55,7 +55,7 @@ def segment_wav(wav_path: str, segment_length_s: int = 30) -> list[str]:
         path = os.path.join(tmpdir, f"seg_{i//samples_per_seg:03d}.wav")
         sf.write(path, seg, sr)
         paths.append(path)
-    return paths
+    return paths, tmpdir
 
 
 def transcribe_segments(asr_pipeline, segments: list[str]) -> str:

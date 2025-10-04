@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import CopyableEditableBox from "@/app/components/CopyableEditableBox";
 import bgImage from "@/public/nb-transcribe-background.png";
@@ -31,11 +31,23 @@ export default function Home() {
   const [rewrite, setRewrite] = useState(true);
   const [page, setPage] = useState<"upload" | "results">("upload");
   const [lastMode, setLastMode] = useState<string>(MODE_OPTIONS[0].value);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<"queued" | "running" | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cleanTitle = CLEAN_TITLES[lastMode] ?? "Omskrevet versjon";
+
+  const clearPollTimeout = () => {
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
+    clearPollTimeout();
+    setActiveJobId(null);
     setLoading(true);
     setError(null);
     setResult(null);
@@ -54,10 +66,31 @@ export default function Home() {
         throw new Error(`${create.status} ${create.statusText} – ${t}`);
       }
       const { job_id } = await create.json();
+      setActiveJobId(job_id);
+      setJobStatus("queued");
+    } catch (err: any) {
+      setError(err.message || "Ukjent feil");
+      setLoading(false);
+      setActiveJobId(null);
+      setJobStatus(null);
+    }
+  }
 
-      const poll = async () => {
-        const res = await fetch(`/api/jobs/${job_id}`);
+  useEffect(() => {
+    if (!activeJobId) {
+      clearPollTimeout();
+      return;
+    }
+
+    let cancelled = false;
+
+    const poll = async () => {
+      clearPollTimeout();
+      try {
+        const res = await fetch(`/api/jobs/${activeJobId}`);
         const data = await res.json();
+        if (cancelled) return;
+
         if (data.status === "done") {
           const raw = data?.result?.raw ?? "";
           const cleanValue = data?.result?.clean;
@@ -67,29 +100,36 @@ export default function Home() {
           });
           setLoading(false);
           setPage("results");
-          return true;
+          setActiveJobId(null);
+          setJobStatus(null);
+          return;
         }
+
         if (data.status === "error") {
           throw new Error(data.error || "Ukjent job-feil");
         }
-        return false;
-      };
 
-      const interval = setInterval(async () => {
-        try {
-          const done = await poll();
-          if (done) clearInterval(interval);
-        } catch (err: any) {
-          clearInterval(interval);
-          setError(err.message || "Ukjent feil");
-          setLoading(false);
+        if (data.status === "queued" || data.status === "running") {
+          setJobStatus(data.status);
         }
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message || "Ukjent feil");
-      setLoading(false);
-    }
-  }
+
+        pollTimeoutRef.current = setTimeout(poll, 2000);
+      } catch (err: any) {
+        if (cancelled) return;
+        setError(err?.message || "Ukjent feil");
+        setLoading(false);
+        setJobStatus(null);
+        setActiveJobId(null);
+      }
+    };
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearPollTimeout();
+    };
+  }, [activeJobId]);
 
   return (
     <div className="min-h-screen flex flex-col text-white font-sans relative">
@@ -172,6 +212,13 @@ export default function Home() {
             >
               {loading ? "Behandler..." : "Start Transkribering"}
             </button>
+            {loading && (
+              <div className="text-center text-sm text-cyan-300">
+                {jobStatus === "running"
+                  ? "Jobben kjører – transkriberer og renskriver."
+                  : "Jobb lagt i kø – starter om et øyeblikk."}
+              </div>
+            )}
           </form>
           {error && <div className="text-red-400">{error}</div>}
         </main>

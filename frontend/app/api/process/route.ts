@@ -5,14 +5,14 @@ const BASE = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 export async function POST(req: Request) {
   try {
     const upstream = await fetch(`${BASE}/process/`, {
-    method: "POST",
-    body: req.body,
-    // @ts-ignore
-    duplex: "half",
-    headers: Object.fromEntries(
-      Array.from(req.headers).filter(([k]) => !["host", "content-length"].includes(k.toLowerCase()))
-    ),
-  });
+      method: "POST",
+      body: req.body,
+      // @ts-ignore
+      duplex: "half",
+      headers: Object.fromEntries(
+        Array.from(req.headers).filter(([k]) => !["host", "content-length"].includes(k.toLowerCase()))
+      ),
+    });
 
     // Fjern hop-by-hop headere som kan skape trøbbel
     const headers = new Headers(upstream.headers);
