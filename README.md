@@ -1,5 +1,7 @@
 # nb-transcribe 🎙️
 
+[![Build and Push Docker Images](https://github.com/jenanos/nb-transcribe/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/jenanos/nb-transcribe/actions/workflows/build-and-push.yml)
+
 Fullverdig verktøykasse for norsk tale-til-tekst med NB-Whisper og renskriving med Gemma-3. Prosjektet består av en FastAPI-backend og en Next.js-frontend.
 
 ## ✨ Funksjoner
