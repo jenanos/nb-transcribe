@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 const BASE = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+const MOCK_MODE = (process.env.MOCK_MODE ?? process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
 
 const sanitizeHeaders = (headers: Headers) => {
   const clean = new Headers(headers);
@@ -27,6 +28,17 @@ const forwardResponse = async (upstream: Response) => {
 };
 
 export async function GET(_req: Request, { params }: any) {
+  if (MOCK_MODE) {
+    // Alternate between queued and completed for demo
+    const isDone = params.id?.toString().endsWith("a") || params.id?.toString().endsWith("0");
+    const payload = isDone
+      ? { id: params.id, status: "completed", result: { text: "Dette er en mock-transkripsjon." } }
+      : { id: params.id, status: "queued" };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
   try {
     const upstream = await fetch(`${BASE}/jobs/${params.id}`);
     return await forwardResponse(upstream);

@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 const BASE = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+const MOCK_MODE = (process.env.MOCK_MODE ?? process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
 
 const sanitizeHeaders = (headers: Headers) => {
   const clean = new Headers(headers);
@@ -32,6 +33,14 @@ const filterRequestHeaders = (headers: Headers) =>
   );
 
 export async function POST(req: Request) {
+  if (MOCK_MODE) {
+    // Simulate job creation
+    const mockId = "mock-job-" + Math.random().toString(36).slice(2, 8);
+    return new Response(JSON.stringify({ id: mockId }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
   try {
     const upstream = await fetch(`${BASE}/jobs`, {
       method: "POST",
