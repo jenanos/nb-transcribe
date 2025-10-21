@@ -2,100 +2,109 @@
 
 [![Build and Push Docker Images](https://github.com/jenanos/nb-transcribe/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/jenanos/nb-transcribe/actions/workflows/build-and-push.yml)
 
-Fullverdig verktøykasse for norsk tale-til-tekst med NB-Whisper og renskriving med Gemma-3. Prosjektet består av en FastAPI-backend og en Next.js-frontend.
+End-to-end Norwegian speech-to-text with a FastAPI backend, Next.js 15 frontend, GPU-accelerated NB-Whisper transcription, and Gemma-3 assisted copy editing.
 
-## ✨ Funksjoner
+## ✨ What’s inside
 
-- GPU-akselerert transkribering med NB-Whisper Large.
-- Renskriver tekst med Gemma-3 i flere moduser (sammendrag, e-post, dokument mm.).
-- Frontend som kan testes mot raske stub-data uten tung backend.
-- Docker Compose-oppsett for hel stack med GPU-akselerasjon.
+- **FastAPI backend** that exposes both synchronous `/process/` and async `/jobs` endpoints.
+- **NB-Whisper Large** for GPU-accelerated automatic speech recognition.
+- **Gemma-3 4B IT** for summarising, rewriting, and workflow extraction.
+- **Stub mode** (`DEV_STUB=1`) to exercise the UI without a GPU, HF token, or FFmpeg.
+- **Docker Compose** definitions for a full-stack deployment with NVIDIA GPU support.
 
-## 🧰 Forutsetninger
+## 🧰 Prerequisites
 
-- Git og en POSIX-kompatibel shell (macOS/Linux) eller WSL2 på Windows.
-- Node.js 20+ og npm (anbefalt via nvm).
-- Python 3.12 med `venv` (bruk samme versjon som i `backend/__pycache__`).
-- FFmpeg tilgjengelig i PATH (`sudo apt install ffmpeg`).
-- NVIDIA GPU med CUDA 12.x for full pipeline.
-- Hugging Face-konto og tilgang til Gemma-3. Sett et personlig tilgangstoken i `HF_TOKEN` før du starter backend.
+- Git and a POSIX-compatible shell (macOS, Linux, or WSL2).
+- Node.js 20+ with npm (consider using `nvm`).
+- Python 3.11+ with `venv`.
+- FFmpeg in your `PATH` (e.g. `sudo apt install ffmpeg`).
+- NVIDIA GPU with CUDA 12.x and drivers installed for the full pipeline.
+- Hugging Face account with access to Gemma-3 and a personal access token for `HF_TOKEN`.
 
-## 🚀 Kom i gang (lokal utvikling)
+## 🚀 Local development
 
-### 1. Klon og installer
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<din-org>/nb-transcribe.git
+git clone https://github.com/<your-org>/nb-transcribe.git
 cd nb-transcribe
 ```
 
-### 2. Backend (full pipeline)
+### 2. Start the backend (full pipeline)
 
 ```bash
 cd backend
-python3.12 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-export HF_TOKEN="<ditt-hf-token>"
+export HF_TOKEN="<your-hf-token>"
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Backend forventer GPU og FFmpeg. Hvis du mangler GPU eller bare vil teste frontenden, se stub-modus under.
+The backend expects a CUDA-capable GPU, FFmpeg, and a valid Hugging Face token to load the transcription and rewriting models.
 
-### 3. Frontend
+### 3. Start the frontend
 
 ```bash
 cd ../frontend
 npm install
-# Oppdater BACKEND_URL i .env.local ved behov (standard http://127.0.0.1:8000)
+echo "BACKEND_URL=http://127.0.0.1:8000" > .env.local  # adjust when needed
 npm run dev
 ```
 
-Frontend starter på `http://localhost:3000` og proxier mot backend-URL-en.
+The Next.js app runs on `http://localhost:3000` and forwards API calls to `BACKEND_URL` (defaults to the backend started above).
 
-## 🧪 Rask frontend-testing med dev stub
+## 🧪 Backend stub mode (no GPU required)
 
-Backend har en lettvekts stub som hopper over GPU-tunge steg og returnerer demo-svar. Start backend slik:
+Set `DEV_STUB=1` to skip heavy model loading and return deterministic demo responses:
 
 ```bash
 cd backend
-source .venv/bin/activate  # hvis du allerede har satt den opp
+source .venv/bin/activate  # reuse the virtual environment created above
 export DEV_STUB=1
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Med `DEV_STUB=1` trenger du verken GPU, HF-token eller FFmpeg. Frontenden kan da testes fritt mot stub-data.
+With the stub enabled you can iterate on the frontend without FFmpeg, CUDA, or `HF_TOKEN`.
+
+## 🧷 Useful commands
+
+| Area     | Command                          | Notes |
+|----------|----------------------------------|-------|
+| Backend  | `pytest`                         | Runs API and pipeline tests (requires `DEV_STUB=1` for fast execution). |
+| Backend  | `uvicorn main:app --reload`      | Starts the FastAPI server locally. |
+| Frontend | `npm run lint`                   | Next.js linting. |
+| Frontend | `npm test`                       | Jest + Testing Library suite. |
 
 ## 🐳 Docker Compose
 
-Hele stacken kan kjøres med Docker (krever NVIDIA GPU + NVIDIA Container Toolkit på hosten).
+Build and run the complete stack with GPU support (requires the NVIDIA Container Toolkit):
 
 ```bash
-export HF_TOKEN="<ditt-hf-token>"
+export HF_TOKEN="<your-hf-token>"
 docker compose up --build
 ```
 
-- Backend bruker `HF_TOKEN` for å autentisere mot Hugging Face ved oppstart.
-- Frontend er tilgjengelig på port 3000, backend på 8000 internt i nettverket.
+- The backend container reads `HF_TOKEN` at startup to authenticate against Hugging Face.
+- The frontend is served on port 3000; the backend listens on port 8000 within the internal network.
 
-## ⚙️ Miljøvariabler
+## ⚙️ Configuration
 
-- `HF_TOKEN` (backend, påkrevd for ekte renskriving): HF access token med rettigheter til Gemma-3.
-- `DEV_STUB` (backend, valgfri): Sett til `1` for å aktivere raske demo-svar.
-- `BACKEND_URL` (frontend, valgfri): Basen for API-kall. Standard `http://127.0.0.1:8000`.
+- `HF_TOKEN` – required by the backend for Gemma-3 powered rewriting when not in stub mode.
+- `DEV_STUB` – enable to run the backend with fixture data and without GPU dependencies.
+- `BACKEND_URL` – frontend override for API base URL (defaults to `http://127.0.0.1:8000`).
 
-## 📂 Prosjektstruktur
+## 📂 Repository layout
 
 ```
 .
-├── backend/        # FastAPI-app, transkribering og renskriving
-├── frontend/       # Next.js-app med app router
+├── backend/        # FastAPI app with transcription and rewriting pipelines
+├── frontend/       # Next.js 15 (App Router) UI
 └── docker-compose.yml
 ```
 
-## 🤝 Tips og videre arbeid
+## 🤝 Contributing
 
-- Kjør `npm run lint` i frontend og legg gjerne til tester etter hvert.
-- Hold øye med GPU-minnebruk når du kjører full pipeline; Gemma-3 kan være minnekrevende.
-- Gi beskjed om bugs eller åpne PR-er for forbedringer - bidrag er velkomne! 🙌
+- Keep an eye on GPU VRAM usage: NB-Whisper Large and Gemma-3 both run on the GPU.
+- Open issues or pull requests with ideas, bug fixes, or documentation improvements—contributions are welcome!
