@@ -32,8 +32,15 @@ export async function GET(_req: Request, { params }: any) {
     // Alternate between queued and completed for demo
     const isDone = params.id?.toString().endsWith("a") || params.id?.toString().endsWith("0");
     const payload = isDone
-      ? { id: params.id, status: "completed", result: { text: "Dette er en mock-transkripsjon." } }
-      : { id: params.id, status: "queued" };
+      ? {
+          job_id: params.id,
+          status: "done",
+          result: {
+            raw: "Dette er en mock-transkripsjon fra NB-transcribe.",
+            clean: "Mock: En renskrevet versjon generert for demonstrasjonen.",
+          },
+        }
+      : { job_id: params.id, status: "queued" };
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: { "content-type": "application/json" },

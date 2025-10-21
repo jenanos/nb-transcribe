@@ -22,6 +22,41 @@ const CLEAN_TITLES: Record<string, string> = {
   workflow: "Arbeidsflyt og LLM-promptforslag",
 };
 
+const MOCK_MODE = (process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
+
+const MOCK_MODE_COPY: Record<string, { raw: string; clean?: string }> = {
+  summary: {
+    raw: "Dette er et eksempel på transkripsjonen fra et kundemøte der vi planlegger utrulling av NB-transcribe.",
+    clean:
+      "Sammendrag:\n- Vi demonstrerte NB-transcribe i et kundemøte.\n- Kunden ønsker mock-modus for porteføljen sin.\n- Neste steg er å produsere demo og dokumentasjon.",
+  },
+  email: {
+    raw: "Hei, dette er et opptak fra kundemøtet vårt om transkripsjonstjenesten.",
+    clean:
+      "Hei team,\n\nTakk for et godt møte i dag! Her er en kort oppsummering og neste steg for NB-transcribe-demoen. Jeg setter opp mock-modus i frontend og eksponerer den via Vercel slik at dere kan teste selv. Gi beskjed om dere ønsker tilgang til self-hosted backenden.\n\nMvh\nNicolai",
+  },
+  document: {
+    raw: "Dette er en lenger tekst fra transkripsjonen.",
+    clean:
+      "I dette dokumentet beskriver vi hvordan NB-transcribe settes opp i containere styrt av Portainer. Tjenesten ligger bak Cloudflare Tunnel og blir kontinuerlig oppdatert gjennom Watchtower og GitHub Actions.",
+  },
+  talking_points: {
+    raw: "Her er noen momenter vi diskuterte under callen.",
+    clean:
+      "Talepunkter:\n1. Presentasjon av NB-transcribe sin pipeline.\n2. Oppsett med Docker Compose, Portainer og automatiske oppdateringer.\n3. Sikker eksponering via Cloudflare Tunnel.\n4. Mock-modus for porteføljevisning.",
+  },
+  polish: {
+    raw: "Original tekst: vi self-hoster appen og bruker egen maskin for GPU.",
+    clean:
+      "Renskrevet versjon: Vi driver NB-transcribe på egen maskin med GPU, pakket i containere som styres via Portainer og eksponeres trygt gjennom Cloudflare Tunnel.",
+  },
+  workflow: {
+    raw: "Rå transkripsjon for arbeidsflyt.",
+    clean:
+      "Arbeidsflyt:\n1. Lydopptak lastes opp til mock-frontenden.\n2. I produksjon sendes jobben til backenden via Cloudflare Tunnel.\n3. Watchtower og GitHub Actions sørger for automatiske oppdateringer av containere.\n\nLLM-prompt forslag:\n- 'Skriv et sammendrag av møtet og fremhev hvordan infrastrukturen er automatisert.'",
+  },
+};
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<string>(MODE_OPTIONS[0].value);
@@ -33,6 +68,7 @@ export default function Home() {
   const [lastMode, setLastMode] = useState<string>(MODE_OPTIONS[0].value);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"queued" | "running" | null>(null);
+  const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cleanTitle = CLEAN_TITLES[lastMode] ?? "Omskrevet versjon";
 
@@ -59,6 +95,22 @@ export default function Home() {
     formData.append("rewrite", String(rewrite));
     setLastMode(selectedMode);
 
+    if (MOCK_MODE) {
+      const mockContent = MOCK_MODE_COPY[selectedMode] ?? MOCK_MODE_COPY.summary;
+      setJobStatus("queued");
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      setJobStatus("running");
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      setResult({
+        raw: mockContent.raw,
+        clean: rewrite && mockContent.clean ? mockContent.clean : null,
+      });
+      setLoading(false);
+      setPage("results");
+      setJobStatus(null);
+      return;
+    }
+
     try {
       const create = await fetch("/api/jobs", { method: "POST", body: formData });
       if (!(create.status === 202 || create.status === 200)) {
@@ -77,6 +129,9 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (MOCK_MODE) {
+      return;
+    }
     if (!activeJobId) {
       clearPollTimeout();
       return;
@@ -138,6 +193,28 @@ export default function Home() {
         <Image src={bgImage} alt="Synthwave background" fill style={{ objectFit: "cover" }} />
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
       </div>
+
+      {showMockInfo && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4">
+          <div className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]">
+            <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock-modus aktivert</h3>
+            <p className="mb-3 text-sm text-gray-200">
+              Denne versjonen av NB-transcribe kjører i mock-modus slik at den kan demonstreres på Vercel uten tilgang
+              til den self-hostede backenden. I produksjon kjører appen i containere styrt av Portainer, eksponert
+              sikkert gjennom Cloudflare Tunnel og oppdatert automatisk med Watchtower og GitHub Actions.
+            </p>
+            <p className="mb-4 text-sm text-gray-200">
+              Kontakt meg direkte dersom du vil teste hele løsningen med GPU-akselerert backend.
+            </p>
+            <button
+              onClick={() => setShowMockInfo(false)}
+              className="rounded-lg bg-pink-500 px-4 py-2 font-bold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
+            >
+              Skjønner!
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Opplastingsside */}
       {page === "upload" && (
