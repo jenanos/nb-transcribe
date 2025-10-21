@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   if (MOCK_MODE) {
     // Simulate job creation
     const mockId = "mock-job-" + Math.random().toString(36).slice(2, 8);
-    return new Response(JSON.stringify({ id: mockId }), {
+    return new Response(JSON.stringify({ job_id: mockId }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
