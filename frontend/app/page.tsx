@@ -284,7 +284,7 @@ export default function Home() {
             <div>
               <label className="font-orbitron text-lg text-cyan-300">Last opp lydfil</label>
               <label
-                htmlFor={MOCK_MODE ? undefined : "upload-file"}
+                htmlFor="upload-file"
                 onClick={(event) => {
                   if (MOCK_MODE) {
                     event.preventDefault();
