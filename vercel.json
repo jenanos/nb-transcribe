@@ -5,5 +5,11 @@
   "env": {
     "NEXT_PUBLIC_MOCK_MODE": "1",
     "MOCK_MODE": "1"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_MOCK_MODE": "1",
+      "MOCK_MODE": "1"
+    }
   }
 }
