@@ -96,7 +96,9 @@ export default function Home() {
         return prev;
       }
       try {
-        return new File([""], MOCK_SAMPLE_FILE_NAME, { type: "audio/mpeg" });
+        // Minimal valid MP3 header (ID3 tag) as mock content
+        const mockMp3Header = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x76]);
+        return new File([mockMp3Header], MOCK_SAMPLE_FILE_NAME, { type: "audio/mpeg" });
       } catch {
         return prev;
       }
