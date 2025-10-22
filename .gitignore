@@ -1,6 +1,7 @@
 # Miljøfiler (aldri sjekk inn)
 .env
 .env.*
+!frontend/.env.local.example
 !.env.example
 
 # OS / editor

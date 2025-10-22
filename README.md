@@ -49,11 +49,12 @@ The backend expects a CUDA-capable GPU, FFmpeg, and a valid Hugging Face token t
 ```bash
 cd ../frontend
 npm install
-echo "BACKEND_URL=http://127.0.0.1:8000" > .env.local  # adjust when needed
+cp .env.local.example .env.local  # adjust values when needed
 npm run dev
 ```
 
 The Next.js app runs on `http://localhost:3000` and forwards API calls to `BACKEND_URL` (defaults to the backend started above).
+Toggle the mocked experience by setting `NEXT_PUBLIC_MOCK_MODE`/`MOCK_MODE` to `1` in `.env.local`.
 
 ## 🧪 Backend stub mode (no GPU required)
 
@@ -67,6 +68,12 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 With the stub enabled you can iterate on the frontend without FFmpeg, CUDA, or `HF_TOKEN`.
+
+## 🧪 Frontend mock mode
+
+- Copy `frontend/.env.local.example` to `.env.local` and keep `NEXT_PUBLIC_MOCK_MODE=1` / `MOCK_MODE=1` to build the demo UI without a backend.
+- The file picker is pre-filled with a demo clip; uploading new audio is disabled and shows a short English explainer.
+- Start the transcription straight away to see mocked raw and rewritten outputs for each mode.
 
 ## 🧷 Useful commands
 
@@ -91,6 +98,8 @@ docker compose up --build
 
 ## ⚙️ Configuration
 
+- `frontend/.env.local.example` – template for local/frontend deployments (mock mode flags and backend URL).
+- `backend/env.example` – template for backend deployments (stub toggle and Hugging Face token).
 - `HF_TOKEN` – required by the backend for Gemma-3 powered rewriting when not in stub mode.
 - `DEV_STUB` – enable to run the backend with fixture data and without GPU dependencies.
 - `BACKEND_URL` – frontend override for API base URL (defaults to `http://127.0.0.1:8000`).
