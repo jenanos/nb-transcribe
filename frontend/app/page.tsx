@@ -301,7 +301,7 @@ export default function Home() {
                 }}
                 tabIndex={MOCK_MODE ? 0 : undefined}
                 role={MOCK_MODE ? "button" : undefined}
-                aria-disabled={MOCK_MODE}
+                aria-disabled={MOCK_MODE ? 'true' : 'false'}
                 className="mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed border-pink-400 rounded-md cursor-pointer hover:border-cyan-400 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
               >
                 <span className="text-center text-pink-400">
