@@ -57,6 +57,8 @@ const MOCK_MODE_COPY: Record<string, { raw: string; clean?: string }> = {
   },
 };
 
+const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<string>(MODE_OPTIONS[0].value);
@@ -69,6 +71,7 @@ export default function Home() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"queued" | "running" | null>(null);
   const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
+  const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cleanTitle = CLEAN_TITLES[lastMode] ?? "Omskrevet versjon";
 
@@ -78,6 +81,29 @@ export default function Home() {
       pollTimeoutRef.current = null;
     }
   };
+
+  useEffect(() => {
+    if (!MOCK_MODE) {
+      return;
+    }
+
+    if (typeof window === "undefined" || typeof window.File === "undefined") {
+      return;
+    }
+
+    setFile((prev) => {
+      if (prev) {
+        return prev;
+      }
+      try {
+        // Minimal valid MP3 header (ID3 tag) as mock content
+        const mockMp3Header = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x76]);
+        return new File([mockMp3Header], MOCK_SAMPLE_FILE_NAME, { type: "audio/mpeg" });
+      } catch {
+        return prev;
+      }
+    });
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -197,20 +223,43 @@ export default function Home() {
       {showMockInfo && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4">
           <div className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]">
-            <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock-modus aktivert</h3>
+            <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock mode enabled</h3>
             <p className="mb-3 text-sm text-gray-200">
-              Denne versjonen av NB-transcribe kjører i mock-modus slik at den kan demonstreres på Vercel uten tilgang
-              til den self-hostede backenden. I produksjon kjører appen i containere styrt av Portainer, eksponert
-              sikkert gjennom Cloudflare Tunnel og oppdatert automatisk med Watchtower og GitHub Actions.
+              This preview of NB-transcribe runs entirely in mock mode so it can be deployed to Vercel without
+              connecting to the self-hosted backend. In production the app runs in containers orchestrated via
+              Portainer, exposed securely through Cloudflare Tunnel, and kept up to date with Watchtower and GitHub
+              Actions.
             </p>
             <p className="mb-4 text-sm text-gray-200">
-              Kontakt meg direkte dersom du vil teste hele løsningen med GPU-akselerert backend.
+              The onboarding details here are in English, while the in-app labels remain in Norwegian because NB-transcribe
+              focuses on the nb-whisper model.
+            </p>
+            <p className="mb-4 text-sm text-gray-200">
+              Reach out if you would like to try the full GPU-backed experience.
             </p>
             <button
               onClick={() => setShowMockInfo(false)}
               className="rounded-lg bg-pink-500 px-4 py-2 font-bold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
             >
-              Skjønner!
+              Got it!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showMockUploadNotice && (
+        <div className="fixed inset-0 z-30 flex items-start justify-center pointer-events-none">
+          <div className="mt-24 w-full max-w-md rounded-xl border border-cyan-400 bg-black/90 p-5 text-sm text-gray-100 shadow-[0_0_15px_#00e5ff] pointer-events-auto">
+            <h4 className="font-orbitron text-lg text-cyan-300 mb-2">File picker disabled in mock mode</h4>
+            <p className="mb-3 text-gray-200">
+              Uploading custom audio is turned off here. We preloaded an example clip so you can start the transcription and optional
+              rewriting steps right away.
+            </p>
+            <button
+              onClick={() => setShowMockUploadNotice(false)}
+              className="rounded-lg bg-pink-500 px-3 py-2 font-semibold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
+            >
+              Understood
             </button>
           </div>
         </div>
@@ -235,10 +284,25 @@ export default function Home() {
           >
             {/* Custom file upload */}
             <div>
-              <label htmlFor="upload-file" className="font-orbitron text-lg text-cyan-300">Last opp lydfil</label>
+              <label className="font-orbitron text-lg text-cyan-300">Last opp lydfil</label>
               <label
                 htmlFor="upload-file"
-                className="mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed border-pink-400 rounded-md cursor-pointer hover:border-cyan-400 transition-colors"
+                onClick={(event) => {
+                  if (MOCK_MODE) {
+                    event.preventDefault();
+                    setShowMockUploadNotice(true);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (MOCK_MODE && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    setShowMockUploadNotice(true);
+                  }
+                }}
+                tabIndex={MOCK_MODE ? 0 : undefined}
+                role={MOCK_MODE ? "button" : undefined}
+                aria-disabled={MOCK_MODE ? 'true' : 'false'}
+                className="mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed border-pink-400 rounded-md cursor-pointer hover:border-cyan-400 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
               >
                 <span className="text-center text-pink-400">
                   {file ? file.name : "Klikk for å velge fil eller dra og slipp"}
@@ -250,7 +314,8 @@ export default function Home() {
                 accept="audio/*"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 className="hidden"
-                required
+                required={!MOCK_MODE}
+                disabled={MOCK_MODE}
               />
             </div>
 
