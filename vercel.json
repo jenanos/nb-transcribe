@@ -1,7 +1,4 @@
 {
   "installCommand": "cd frontend && npm install",
-  "buildCommand": "cd frontend && npm run build",
-  "env": {
-    "NEXT_PUBLIC_MOCK_MODE": "1"
-  }
+  "buildCommand": "cd frontend && npm run build"
 }
