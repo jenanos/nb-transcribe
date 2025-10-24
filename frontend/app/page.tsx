@@ -227,7 +227,7 @@ export default function Home() {
             <p className="mb-3 text-sm text-gray-200">
               This preview of NB-transcribe runs entirely in mock mode so it can be deployed to Vercel without the
               private FastAPI backend. Outside this mock, the production pipeline pairs the Next.js interface with GPU
-              jobs that run NB-Whisper and Gemma-3 locally on an RTX 3080 for transcription, summarising, and
+              jobs that run NB-Whisper and Gemma-3 locally on an RTX 3080 for transcription, summarizing, and
               rewriting, with the backend code and API contracts available on
               {" "}
               <a
