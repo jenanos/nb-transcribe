@@ -225,17 +225,24 @@ export default function Home() {
           <div className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]">
             <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock mode enabled</h3>
             <p className="mb-3 text-sm text-gray-200">
-              This preview of NB-transcribe runs entirely in mock mode so it can be deployed to Vercel without
-              connecting to the self-hosted backend. In production the app runs in containers orchestrated via
-              Portainer, exposed securely through Cloudflare Tunnel, and kept up to date with Watchtower and GitHub
-              Actions.
+              This preview of NB-transcribe runs entirely in mock mode so it can be deployed to Vercel without the
+              private FastAPI backend. Outside this mock, the production pipeline pairs the Next.js interface with GPU
+              jobs that run NB-Whisper and Gemma-3 locally on an RTX 3080 for transcription, summarizing, and
+              rewriting, with the backend code and API contracts available on
+              {" "}
+              <a
+                href="https://github.com/jenanos/nb-transcribe"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-pink-400 underline"
+              >
+                GitHub
+              </a>
+              .
             </p>
             <p className="mb-4 text-sm text-gray-200">
-              The onboarding details here are in English, while the in-app labels remain in Norwegian because NB-transcribe
-              focuses on the nb-whisper model.
-            </p>
-            <p className="mb-4 text-sm text-gray-200">
-              Reach out if you would like to try the full GPU-backed experience.
+              Day-to-day I self-host the stack in Docker containers orchestrated through Portainer, patched by
+              Watchtower, exposed behind a Cloudflare Tunnel, and deployed via GitHub Actions.
             </p>
             <button
               onClick={() => setShowMockInfo(false)}
