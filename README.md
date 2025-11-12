@@ -102,7 +102,9 @@ docker compose up --build
 - `backend/env.example` – template for backend deployments (stub toggle and Hugging Face token).
 - `HF_TOKEN` – required by the backend for Gemma-3 powered rewriting when not in stub mode.
 - `DEV_STUB` – enable to run the backend with fixture data and without GPU dependencies.
-- `BACKEND_URL` – frontend override for API base URL (defaults to `http://127.0.0.1:8000`).
+- `BACKEND_URL` / `NEXT_PUBLIC_BACKEND_URL` – frontend override for the API base URL
+  (defaults to `http://127.0.0.1:8000`). The server-side proxy prefers `BACKEND_URL`
+  but will fall back to the public variable if only that is provided.
 
 ## 📂 Repository layout
 
