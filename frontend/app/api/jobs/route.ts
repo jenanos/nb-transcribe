@@ -2,8 +2,10 @@ export const runtime = "nodejs";
 const BASE =
   process.env.BACKEND_URL ??
   process.env.NEXT_PUBLIC_BACKEND_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8000";
-const MOCK_MODE = (process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
+const MOCK_MODE =
+  (process.env.NEXT_PUBLIC_MOCK_MODE ?? process.env.TRANSCRIBE_MOCK_MODE ?? "0").toString() === "1";
 
 const sanitizeHeaders = (headers: Headers) => {
   const clean = new Headers(headers);
