@@ -109,6 +109,8 @@ docker compose up --build
 - `NEXT_PUBLIC_DIRECT_BACKEND_URL` – optional public URL for bypassing the Next.js proxy and
   streaming file uploads directly to FastAPI. Enable this when you need to send very large
   audio files (10–30 minutes) that would otherwise hit the Vercel/serverless body limits.
+  **Important:** Because uploads originate directly from the browser, the backend's CORS
+  `allow_origins` list must include the domain where the frontend is hosted.
 - `NEXT_PUBLIC_MOCK_MODE` / `TRANSCRIBE_MOCK_MODE` – set to `1` to enable the fully mocked
   UI without talking to the backend.
 

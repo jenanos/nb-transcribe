@@ -23,10 +23,7 @@ const CLEAN_TITLES: Record<string, string> = {
 };
 
 const MOCK_MODE = (process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
-const RAW_DIRECT_UPLOAD_BASE =
-  process.env.NEXT_PUBLIC_DIRECT_BACKEND_URL ??
-  process.env.NEXT_PUBLIC_DIRECT_UPLOAD_URL ??
-  "";
+const RAW_DIRECT_UPLOAD_BASE = process.env.NEXT_PUBLIC_DIRECT_BACKEND_URL ?? "";
 const DIRECT_UPLOAD_BASE = RAW_DIRECT_UPLOAD_BASE.trim().replace(/\/$/, "");
 const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 
