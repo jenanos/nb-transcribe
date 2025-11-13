@@ -7,12 +7,12 @@ const BASE =
 const MOCK_MODE =
   (process.env.NEXT_PUBLIC_MOCK_MODE ?? process.env.TRANSCRIBE_MOCK_MODE ?? "0").toString() === "1";
 
-const getCloudflareAccessHeaders = () => {
+const getCloudflareAccessHeaders = (): HeadersInit | undefined => {
   const clientId = process.env.CF_ACCESS_CLIENT_ID;
   const clientSecret = process.env.CF_ACCESS_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return {};
+    return undefined;
   }
 
   return {
