@@ -1,3 +1,5 @@
+import { getCloudflareAccessHeaders } from "../../utils/cloudflare";
+
 export const runtime = "nodejs";
 const BASE =
   process.env.BACKEND_URL ??
@@ -52,7 +54,9 @@ export async function GET(_req: Request, { params }: any) {
     });
   }
   try {
-    const upstream = await fetch(`${BASE}/jobs/${params.id}`);
+    const upstream = await fetch(`${BASE}/jobs/${params.id}`, {
+      headers: getCloudflareAccessHeaders(),
+    });
     return await forwardResponse(upstream);
   } catch (err: any) {
     return new Response(

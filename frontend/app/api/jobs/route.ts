@@ -1,3 +1,5 @@
+import { getCloudflareAccessHeaders } from "../utils/cloudflare";
+
 export const runtime = "nodejs";
 const BASE =
   process.env.BACKEND_URL ??
@@ -52,7 +54,10 @@ export async function POST(req: Request) {
       body: req.body,
       // @ts-ignore
       duplex: "half",
-      headers: filterRequestHeaders(req.headers),
+      headers: {
+        ...filterRequestHeaders(req.headers),
+        ...(getCloudflareAccessHeaders() ?? {}),
+      },
     });
     return await forwardResponse(upstream);
   } catch (err: any) {

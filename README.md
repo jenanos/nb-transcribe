@@ -109,6 +109,16 @@ docker compose up --build
 - `NEXT_PUBLIC_MOCK_MODE` / `TRANSCRIBE_MOCK_MODE` – set to `1` to enable the fully mocked
   UI without talking to the backend.
 
+## ☁️ Cloudflare Access
+
+- Set `BACKEND_URL` so the Next.js server-side API routes know which backend host to
+  contact. The proxy prefers this variable over the public fallbacks to keep secrets on
+  the server only.
+- When the backend sits behind Cloudflare Access, provide `CF_ACCESS_CLIENT_ID` and
+  `CF_ACCESS_CLIENT_SECRET` (service token credentials). The API routes automatically add
+  the `CF-Access-Client-Id`/`CF-Access-Client-Secret` headers when **both** variables are
+  defined, without ever exposing them to the browser.
+
 ## 📂 Repository layout
 
 ```
