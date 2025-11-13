@@ -106,6 +106,9 @@ docker compose up --build
   the API base URL (default: `http://127.0.0.1:8000`). The server-side proxy prefers
   `BACKEND_URL` when present, but it will fall back to either public variable so existing
   Docker/infra setups keep working.
+- `NEXT_PUBLIC_DIRECT_BACKEND_URL` – optional public URL for bypassing the Next.js proxy and
+  streaming file uploads directly to FastAPI. Enable this when you need to send very large
+  audio files (10–30 minutes) that would otherwise hit the Vercel/serverless body limits.
 - `NEXT_PUBLIC_MOCK_MODE` / `TRANSCRIBE_MOCK_MODE` – set to `1` to enable the fully mocked
   UI without talking to the backend.
 
