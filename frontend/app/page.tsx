@@ -291,7 +291,9 @@ export default function Home() {
           >
             {/* Custom file upload */}
             <div>
-              <label className="font-orbitron text-lg text-cyan-300">Last opp lydfil</label>
+              <label className="font-orbitron text-lg text-cyan-300" htmlFor="upload-file">
+                Last opp lydfil
+              </label>
               <label
                 htmlFor="upload-file"
                 onClick={(event) => {
