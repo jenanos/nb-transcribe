@@ -32,7 +32,9 @@ export const withCloudflareAccessHeaders = (headers?: HeadersInit): Record<strin
 
 export const sanitizeHeaders = (headers: Headers) => {
   const clean = new Headers(headers);
-  ["content-length", "transfer-encoding", "connection"].forEach((name) => clean.delete(name));
+  ["content-length", "transfer-encoding", "connection", "content-encoding"].forEach((name) =>
+    clean.delete(name)
+  );
   return clean;
 };
 
