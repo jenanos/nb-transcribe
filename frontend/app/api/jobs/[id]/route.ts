@@ -7,6 +7,20 @@ const BASE =
 const MOCK_MODE =
   (process.env.NEXT_PUBLIC_MOCK_MODE ?? process.env.TRANSCRIBE_MOCK_MODE ?? "0").toString() === "1";
 
+const getCloudflareAccessHeaders = () => {
+  const clientId = process.env.CF_ACCESS_CLIENT_ID;
+  const clientSecret = process.env.CF_ACCESS_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return {};
+  }
+
+  return {
+    "CF-Access-Client-Id": clientId,
+    "CF-Access-Client-Secret": clientSecret,
+  } satisfies Record<string, string>;
+};
+
 const sanitizeHeaders = (headers: Headers) => {
   const clean = new Headers(headers);
   ["content-length", "transfer-encoding", "connection"].forEach((name) => clean.delete(name));
@@ -52,7 +66,9 @@ export async function GET(_req: Request, { params }: any) {
     });
   }
   try {
-    const upstream = await fetch(`${BASE}/jobs/${params.id}`);
+    const upstream = await fetch(`${BASE}/jobs/${params.id}`, {
+      headers: getCloudflareAccessHeaders(),
+    });
     return await forwardResponse(upstream);
   } catch (err: any) {
     return new Response(
