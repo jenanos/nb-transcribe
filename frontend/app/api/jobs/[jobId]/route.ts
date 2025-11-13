@@ -9,14 +9,27 @@ import {
 export const runtime = "nodejs";
 
 export async function GET(req: Request, { params }: { params: { jobId?: string } }) {
+  const jobId = params.jobId;
+
   if (MOCK_MODE) {
-    return new Response(
-      JSON.stringify({ status: "queued" }),
-      { status: 200, headers: { "content-type": "application/json" } }
-    );
+    const isDone = jobId?.toString().endsWith("a") || jobId?.toString().endsWith("0");
+    const payload = isDone
+      ? {
+          job_id: jobId,
+          status: "done",
+          result: {
+            raw: "Dette er en mock-transkripsjon fra NB-transcribe.",
+            clean: "Mock: En renskrevet versjon generert for demonstrasjonen.",
+          },
+        }
+      : { job_id: jobId, status: "queued" };
+
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   }
 
-  const jobId = params.jobId;
   if (!jobId) {
     return new Response(
       JSON.stringify({ error: "Job ID is required" }),
