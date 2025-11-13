@@ -8,8 +8,11 @@ import {
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request, { params }: { params: { jobId?: string } }) {
-  const jobId = params.jobId;
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  const { jobId } = await params;
 
   if (MOCK_MODE) {
     const isDone = jobId?.toString().endsWith("a") || jobId?.toString().endsWith("0");
@@ -40,6 +43,7 @@ export async function GET(req: Request, { params }: { params: { jobId?: string }
   try {
     const upstream = await fetch(`${BACKEND_BASE_URL}/jobs/${jobId}`, {
       method: "GET",
+      cache: "no-store",
       headers: withCloudflareAccessHeaders(filterRequestHeaders(req.headers)),
     });
     return await forwardResponse(upstream);
