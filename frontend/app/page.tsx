@@ -23,6 +23,9 @@ const CLEAN_TITLES: Record<string, string> = {
 };
 
 const MOCK_MODE = (process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
+const RAW_DIRECT_UPLOAD_BASE = process.env.NEXT_PUBLIC_DIRECT_BACKEND_URL ?? "";
+const DIRECT_UPLOAD_BASE = RAW_DIRECT_UPLOAD_BASE.trim().replace(/\/$/, "");
+const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 
 const MOCK_MODE_COPY: Record<string, { raw: string; clean?: string }> = {
   summary: {
@@ -69,6 +72,7 @@ export default function Home() {
   const [page, setPage] = useState<"upload" | "results">("upload");
   const [lastMode, setLastMode] = useState<string>(MODE_OPTIONS[0].value);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobStatusBaseUrl, setJobStatusBaseUrl] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"queued" | "running" | null>(null);
   const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
   const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
@@ -137,8 +141,14 @@ export default function Home() {
       return;
     }
 
+    const jobEndpointBase = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/jobs` : "/api/jobs";
+
     try {
-      const create = await fetch("/api/jobs", { method: "POST", body: formData });
+      const create = await fetch(jobEndpointBase, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
       if (!(create.status === 202 || create.status === 200)) {
         const t = await create.text();
         throw new Error(`${create.status} ${create.statusText} – ${t}`);
@@ -146,11 +156,13 @@ export default function Home() {
       const { job_id } = await create.json();
       setActiveJobId(job_id);
       setJobStatus("queued");
+      setJobStatusBaseUrl(jobEndpointBase);
     } catch (err: any) {
       setError(err.message || "Ukjent feil");
       setLoading(false);
       setActiveJobId(null);
       setJobStatus(null);
+      setJobStatusBaseUrl(null);
     }
   }
 
@@ -168,7 +180,8 @@ export default function Home() {
     const poll = async () => {
       clearPollTimeout();
       try {
-        const res = await fetch(`/api/jobs/${activeJobId}`);
+        const pollBase = jobStatusBaseUrl || "/api/jobs";
+        const res = await fetch(`${pollBase}/${activeJobId}`, { cache: "no-store", credentials: "include" });
         const data = await res.json();
         if (cancelled) return;
 
@@ -183,6 +196,7 @@ export default function Home() {
           setPage("results");
           setActiveJobId(null);
           setJobStatus(null);
+          setJobStatusBaseUrl(null);
           return;
         }
 
@@ -201,6 +215,7 @@ export default function Home() {
         setLoading(false);
         setJobStatus(null);
         setActiveJobId(null);
+        setJobStatusBaseUrl(null);
       }
     };
 
@@ -210,7 +225,7 @@ export default function Home() {
       cancelled = true;
       clearPollTimeout();
     };
-  }, [activeJobId]);
+  }, [activeJobId, jobStatusBaseUrl]);
 
   return (
     <div className="min-h-screen flex flex-col text-white font-sans relative">
