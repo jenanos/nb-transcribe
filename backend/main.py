@@ -13,6 +13,8 @@ from functools import lru_cache
 from uuid import uuid4
 from typing import Dict, Any, Optional
 
+from database import save_transcription_record, setup_database
+
 DEV_STUB = os.environ.get("DEV_STUB") == "1"
 logger = logging.getLogger(__name__)
 
@@ -65,6 +67,11 @@ def _warm_pipelines():
 
 
 @app.on_event("startup")
+async def setup_database_on_startup():
+    setup_database()
+
+
+@app.on_event("startup")
 async def warm_pipelines_on_startup():
     if DEV_STUB:
         return
@@ -74,6 +81,13 @@ async def warm_pipelines_on_startup():
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 JOB_TTL_SECONDS = 60 * 30  # behold ferdige jobber i 30 minutter
+
+
+def normalize_prompt(value: Optional[str]) -> Optional[str]:
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return None
 
 
 async def persist_upload(upload: UploadFile) -> str:
@@ -102,8 +116,26 @@ def cleanup_jobs(now: Optional[float] = None) -> None:
 # ---------------------------
 # 2) Felles transkriberingsfunksjon
 # ---------------------------
-def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[str, Optional[str]]:
+def run_transcribe_pipeline(
+    input_path: str,
+    mode: str,
+    rewrite: bool,
+    prompt: Optional[str] = None,
+    original_filename: Optional[str] = None,
+) -> Dict[str, Any]:
     """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
+
+    metadata: Dict[str, Any] = {
+        "rewrite_mode": mode,
+        "rewrite_enabled": rewrite,
+        "prompt": prompt,
+        "original_filename": original_filename,
+        "model_id": os.environ.get("MODEL_ID"),
+        "requested_at": time.time(),
+    }
+
+    with contextlib.suppress(OSError):
+        metadata["input_size_bytes"] = os.path.getsize(input_path)
 
     # Lettvekts stub for lokal utvikling og tester
     if DEV_STUB:
@@ -124,9 +156,12 @@ def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[s
             ),
         }
         clean_text = clean_stub_map.get(mode, "[DEV] Stub renskrevet tekst") if rewrite else None
+        metadata.setdefault("audio_duration_seconds", 0.0)
+        metadata.setdefault("segment_count", 0)
         return {
             "raw": "[DEV] Stub råtranskripsjon",
             "clean": clean_text,
+            "metadata": metadata,
         }
 
     # Importer tunge avhengigheter kun når vi faktisk trenger dem
@@ -142,7 +177,20 @@ def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[s
     segments_dir: Optional[str] = None
     try:
         wav_path = to_wav(input_path)
+        metadata["audio_duration_seconds"] = None
+        try:
+            import soundfile as sf  # type: ignore[import-not-found]
+
+            info = sf.info(wav_path)
+            if hasattr(info, "duration") and info.duration is not None:
+                metadata["audio_duration_seconds"] = float(info.duration)
+            elif getattr(info, "frames", None) and getattr(info, "samplerate", None):
+                metadata["audio_duration_seconds"] = info.frames / info.samplerate
+        except Exception:  # pragma: no cover - best effort metadata
+            metadata["audio_duration_seconds"] = None
+
         segments, segments_dir = segment_wav(wav_path, 30)
+        metadata["segment_count"] = len(segments)
 
         # ASR
         asr = get_asr_pipeline()
@@ -152,10 +200,10 @@ def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[s
         clean_transcript = None
         if rewrite:
             rewriter = get_rewriter_pipeline()
-            clean_transcript = rewrite_text(rewriter, raw_transcript, mode)
+            clean_transcript = rewrite_text(rewriter, raw_transcript, mode, prompt)
             torch.cuda.empty_cache()
 
-        return {"raw": raw_transcript, "clean": clean_transcript}
+        return {"raw": raw_transcript, "clean": clean_transcript, "metadata": metadata}
     finally:
         if segments_dir:
             shutil.rmtree(segments_dir, ignore_errors=True)
@@ -172,13 +220,32 @@ def run_transcribe_pipeline(input_path: str, mode: str, rewrite: bool) -> Dict[s
 async def process(
     file: UploadFile = File(...),
     mode: str = Form("summary"),
-    rewrite: bool = Form(True)
+    rewrite: bool = Form(True),
+    prompt: Optional[str] = Form(None),
 ):
+    original_filename = file.filename
     tmp_path = await persist_upload(file)
+    prompt_value = normalize_prompt(prompt)
 
+    job_id = str(uuid4())
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(executor, run_transcribe_pipeline, tmp_path, mode, rewrite)
-    return JSONResponse(result)
+    result = await loop.run_in_executor(
+        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, prompt_value, original_filename
+    )
+
+    save_transcription_record(
+        job_id=job_id,
+        raw_text=result.get("raw"),
+        clean_text=result.get("clean"),
+        rewrite_mode=mode,
+        rewrite_enabled=rewrite,
+        prompt=prompt_value,
+        metadata=result.get("metadata"),
+        status="done",
+    )
+
+    payload = {"job_id": job_id, **result}
+    return JSONResponse(payload)
 
 # ---------------------------
 # 4) Enkel "jobbkø" i minne + async endepunkt (for Cloudflare)
@@ -186,15 +253,51 @@ async def process(
 executor = ThreadPoolExecutor(max_workers=1)  # kjør én jobb om gangen (GPU)
 JOBS: Dict[str, Dict[str, Any]] = {}         # {job_id: {status, result, error}}
 
-def _submit_job(file_path: str, mode: str, rewrite: bool, job_id: str):
+def _submit_job(
+    file_path: str,
+    mode: str,
+    rewrite: bool,
+    job_id: str,
+    original_filename: Optional[str] = None,
+    prompt: Optional[str] = None,
+):
+    prompt = normalize_prompt(prompt)
+    metadata_for_db: Dict[str, Any] = {
+        "rewrite_mode": mode,
+        "rewrite_enabled": rewrite,
+        "prompt": prompt,
+        "original_filename": original_filename,
+    }
     try:
         JOBS[job_id]["status"] = "running"
-        result = run_transcribe_pipeline(file_path, mode, rewrite)
+        result = run_transcribe_pipeline(file_path, mode, rewrite, prompt, original_filename)
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["result"] = result
+        metadata_for_db = result.get("metadata", metadata_for_db)
+        save_transcription_record(
+            job_id=job_id,
+            raw_text=result.get("raw"),
+            clean_text=result.get("clean"),
+            rewrite_mode=mode,
+            rewrite_enabled=rewrite,
+            prompt=prompt,
+            metadata=metadata_for_db,
+            status="done",
+        )
     except Exception as e:
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"] = str(e)
+        save_transcription_record(
+            job_id=job_id,
+            raw_text=None,
+            clean_text=None,
+            rewrite_mode=mode,
+            rewrite_enabled=rewrite,
+            prompt=prompt,
+            metadata=metadata_for_db,
+            status="error",
+            error_message=str(e),
+        )
     finally:
         cleanup_jobs()
 
@@ -202,15 +305,27 @@ def _submit_job(file_path: str, mode: str, rewrite: bool, job_id: str):
 async def create_job(
     file: UploadFile = File(...),
     mode: str = Form("summary"),
-    rewrite: bool = Form(True)
+    rewrite: bool = Form(True),
+    prompt: Optional[str] = Form(None),
 ):
     tmp_path = await persist_upload(file)
+    original_filename = file.filename
+    prompt_value = normalize_prompt(prompt)
 
     job_id = str(uuid4())
     JOBS[job_id] = {"status": "queued", "result": None, "error": None, "created_at": time.time()}
 
     loop = asyncio.get_running_loop()
-    loop.run_in_executor(executor, _submit_job, tmp_path, mode, rewrite, job_id)
+    loop.run_in_executor(
+        executor,
+        _submit_job,
+        tmp_path,
+        mode,
+        rewrite,
+        job_id,
+        original_filename,
+        prompt_value,
+    )
 
     cleanup_jobs()
     return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)

@@ -1,6 +1,7 @@
 import importlib
 import io
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -28,10 +29,10 @@ async def test_process_endpoint_uses_stub(stubbed_main):
 
     assert response.status_code == 200
     payload = json.loads(response.body.decode())
-    assert payload == {
-        "raw": "[DEV] Stub råtranskripsjon",
-        "clean": "[DEV] Stub renskrevet tekst",
-    }
+    assert payload["raw"] == "[DEV] Stub råtranskripsjon"
+    assert payload["clean"] == "[DEV] Stub sammendrag av transkripsjonen"
+    assert "job_id" in payload
+    assert payload["metadata"]["rewrite_mode"] == "summary"
 
 
 def test_submit_job_stubbed(tmp_path: Path, stubbed_main):
@@ -41,14 +42,12 @@ def test_submit_job_stubbed(tmp_path: Path, stubbed_main):
     job_id = "job-123"
     stubbed_main.JOBS[job_id] = {"status": "queued", "result": None, "error": None}
 
-    stubbed_main._submit_job(str(audio_path), "summary", True, job_id)
+    stubbed_main._submit_job(str(audio_path), "summary", True, job_id, "audio.wav", None)
 
     job = stubbed_main.JOBS[job_id]
     assert job["status"] == "done"
-    assert job["result"] == {
-        "raw": "[DEV] Stub råtranskripsjon",
-        "clean": "[DEV] Stub renskrevet tekst",
-    }
+    assert job["result"]["raw"] == "[DEV] Stub råtranskripsjon"
+    assert job["result"]["clean"] == "[DEV] Stub sammendrag av transkripsjonen"
 
 
 def test_submit_job_handles_error(tmp_path: Path, stubbed_main, monkeypatch):
@@ -56,14 +55,19 @@ def test_submit_job_handles_error(tmp_path: Path, stubbed_main, monkeypatch):
     audio_path.write_bytes(b"fake")
 
     job_id = "job-error"
-    stubbed_main.JOBS[job_id] = {"status": "queued", "result": None, "error": None, "created_at": 0.0}
+    stubbed_main.JOBS[job_id] = {
+        "status": "queued",
+        "result": None,
+        "error": None,
+        "created_at": time.time(),
+    }
 
     def failing_pipeline(*_args, **_kwargs):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(stubbed_main, "run_transcribe_pipeline", failing_pipeline)
 
-    stubbed_main._submit_job(str(audio_path), "summary", True, job_id)
+    stubbed_main._submit_job(str(audio_path), "summary", True, job_id, "audio.wav", None)
 
     job = stubbed_main.JOBS[job_id]
     assert job["status"] == "error"
