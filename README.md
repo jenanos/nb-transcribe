@@ -95,11 +95,27 @@ docker compose up --build
 
 - The backend container reads `HF_TOKEN` at startup to authenticate against Hugging Face.
 - The frontend is served on port 3000; the backend listens on port 8000 within the internal network.
+- A PostgreSQL 16 container called `db` keeps all transcription results. The backend connects via
+  `DATABASE_URL=postgresql+psycopg://nbtranscribe:nbtranscribe@db:5432/nbtranscribe` by default in
+  the Compose file.
+
+## 🗃️ Database persistence
+
+- Set `DATABASE_URL` to a PostgreSQL connection string (SQLAlchemy 2.x syntax, e.g.
+  `postgresql+psycopg://user:password@hostname:5432/nb_transcribe`).
+- When configured, the backend creates a `transcription_records` table that stores the raw output,
+  rewritten text, prompt, rewrite mode, duration, input size, model id, filenames, status, and a JSON
+  blob with additional metadata for every synchronous `/process/` call or async job.
+- Missing or invalid `DATABASE_URL` values simply disable persistence, keeping local DEV_STUB
+  workflows simple.
+- Deployments running multiple backend instances can point them all to the same database service to
+  consolidate job history.
 
 ## ⚙️ Configuration
 
 - `frontend/.env.local.example` – template for local/frontend deployments (mock mode flag and backend URL).
 - `backend/env.example` – template for backend deployments (stub toggle and Hugging Face token).
+- `DATABASE_URL` – optional PostgreSQL DSN consumed by SQLAlchemy to store transcription history.
 - `HF_TOKEN` – required by the backend for Gemma-3 powered rewriting when not in stub mode.
 - `DEV_STUB` – enable to run the backend with fixture data and without GPU dependencies.
 - `BACKEND_URL` / `NEXT_PUBLIC_BACKEND_URL` / `NEXT_PUBLIC_API_URL` – frontend overrides for

@@ -31,7 +31,7 @@ def extract_model_response(text: str) -> str:
     return text.strip()
 
 
-def rewrite_text(pipe_tokenizer, text: str, mode: str = "summary") -> str:
+def rewrite_text(pipe_tokenizer, text: str, mode: str = "summary", prompt: str | None = None) -> str:
     """Renskriver råtekst med Gemma-3 via chat-template og pipeline-API."""
     pipe, tokenizer = pipe_tokenizer
     # Dynamisk system-prompt basert på mode
@@ -85,9 +85,15 @@ def rewrite_text(pipe_tokenizer, text: str, mode: str = "summary") -> str:
             "Utfør omskriving uten å gi tilbakemeldinger eller ros."
         )
 
+    user_text = text
+    if prompt:
+        prompt_clean = prompt.strip()
+        if prompt_clean:
+            user_text = f"{prompt_clean}\n\n{text}"
+
     messages = [
         {"role": "system", "content": [{"type": "text", "text": system_text}]},
-        {"role": "user",   "content": [{"type": "text", "text": text}]}
+        {"role": "user",   "content": [{"type": "text", "text": user_text}]}
     ]
     prompt = tokenizer.apply_chat_template(
         messages,

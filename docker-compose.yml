@@ -3,12 +3,16 @@ networks:
   cf_edge:
     external: true
 
+volumes:
+  db-data: {}
+
 services:
   backend:
     build: ./backend
     container_name: nb-transcribe-backend
     environment:
       - HF_TOKEN=${HF_TOKEN}
+      - DATABASE_URL=postgresql+psycopg://nbtranscribe:nbtranscribe@db:5432/nbtranscribe
     deploy:
       resources:
         reservations:
@@ -16,6 +20,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [ gpu ]
+    depends_on:
+      - db
     networks: [internal_app]
 
   frontend:
@@ -26,3 +32,15 @@ services:
     environment:
       - BACKEND_URL=http://backend:8000
     networks: [internal_app, cf_edge]
+
+  db:
+    image: postgres:16
+    container_name: nb-transcribe-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nbtranscribe
+      POSTGRES_USER: nbtranscribe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nbtranscribe}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [internal_app]

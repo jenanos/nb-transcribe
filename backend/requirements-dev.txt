@@ -3,4 +3,7 @@ fastapi
 starlette
 httpx
 pytest
+pytest-asyncio
 python-multipart
+SQLAlchemy>=2.0
+psycopg[binary]>=3.1
