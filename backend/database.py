@@ -71,6 +71,12 @@ def setup_database() -> None:
         raise
 
 
+def is_database_configured() -> bool:
+    """Returns True when a database engine/session factory is available."""
+
+    return _SESSION_FACTORY is not None
+
+
 def save_transcription_record(
     *,
     job_id: str,
@@ -112,3 +118,47 @@ def save_transcription_record(
             session.commit()
     except SQLAlchemyError as exc:
         logger.error("Failed to persist transcription %s: %s", job_id, exc)
+
+
+def list_transcription_records(limit: int = 50) -> list[dict[str, Any]]:
+    """Returns the most recent transcription records as dictionaries."""
+
+    if _SESSION_FACTORY is None:
+        logger.debug("Database session factory missing; cannot list transcriptions")
+        return []
+
+    try:
+        with _SESSION_FACTORY() as session:  # type: ignore[misc]
+            records = (
+                session.query(TranscriptionRecord)
+                .order_by(TranscriptionRecord.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+
+        return [
+            {
+                "id": record.id,
+                "job_id": record.job_id,
+                "raw_transcript": record.raw_transcript,
+                "clean_transcript": record.clean_transcript,
+                "rewrite_mode": record.rewrite_mode,
+                "rewrite_enabled": record.rewrite_enabled,
+                "prompt": record.prompt,
+                "audio_duration_seconds": record.audio_duration_seconds,
+                "input_size_bytes": record.input_size_bytes,
+                "original_filename": record.original_filename,
+                "model_id": record.model_id,
+                "metadata_json": record.metadata_json,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+                "completed_at": record.completed_at.isoformat()
+                if record.completed_at
+                else None,
+                "status": record.status,
+                "error_message": record.error_message,
+            }
+            for record in records
+        ]
+    except SQLAlchemyError as exc:
+        logger.error("Failed to list transcriptions: %s", exc)
+        return []

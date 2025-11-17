@@ -13,7 +13,12 @@ from functools import lru_cache
 from uuid import uuid4
 from typing import Dict, Any, Optional
 
-from database import save_transcription_record, setup_database
+from database import (
+    is_database_configured,
+    list_transcription_records,
+    save_transcription_record,
+    setup_database,
+)
 
 DEV_STUB = os.environ.get("DEV_STUB") == "1"
 logger = logging.getLogger(__name__)
@@ -342,6 +347,16 @@ async def get_job(job_id: str):
     if job["status"] == "error":
         return JSONResponse({"status": "error", "error": job["error"]}, status_code=500)
     return JSONResponse({"status": job["status"]})
+
+
+@app.get("/transcriptions")
+async def get_transcriptions(limit: int = 50):
+    if not is_database_configured():
+        return JSONResponse({"error": "Database not configured"}, status_code=503)
+
+    safe_limit = max(1, min(limit, 200))
+    records = list_transcription_records(limit=safe_limit)
+    return JSONResponse({"items": records})
 
 
 @app.on_event("shutdown")
