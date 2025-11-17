@@ -58,7 +58,7 @@ def setup_database() -> None:
         logger.info("DATABASE_URL not set; skipping database initialisation.")
         return
 
-    _ENGINE = create_engine(database_url, future=True)
+    _ENGINE = create_engine(database_url)
     _SESSION_FACTORY = sessionmaker(bind=_ENGINE, expire_on_commit=False)
 
     try:

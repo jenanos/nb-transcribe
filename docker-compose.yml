@@ -40,7 +40,7 @@ services:
     environment:
       POSTGRES_DB: nbtranscribe
       POSTGRES_USER: nbtranscribe
-      POSTGRES_PASSWORD: nbtranscribe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nbtranscribe}
     volumes:
       - db-data:/var/lib/postgresql/data
     networks: [internal_app]

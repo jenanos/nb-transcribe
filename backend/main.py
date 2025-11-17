@@ -125,6 +125,7 @@ def run_transcribe_pipeline(
 ) -> Dict[str, Any]:
     """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
 
+    prompt = normalize_prompt(prompt)
     metadata: Dict[str, Any] = {
         "rewrite_mode": mode,
         "rewrite_enabled": rewrite,
@@ -225,13 +226,14 @@ async def process(
 ):
     original_filename = file.filename
     tmp_path = await persist_upload(file)
-    prompt_value = normalize_prompt(prompt)
 
     job_id = str(uuid4())
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, prompt_value, original_filename
+        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, prompt, original_filename
     )
+
+    metadata = result.get("metadata") or {}
 
     save_transcription_record(
         job_id=job_id,
@@ -239,8 +241,8 @@ async def process(
         clean_text=result.get("clean"),
         rewrite_mode=mode,
         rewrite_enabled=rewrite,
-        prompt=prompt_value,
-        metadata=result.get("metadata"),
+        prompt=metadata.get("prompt"),
+        metadata=metadata,
         status="done",
     )
 
@@ -310,7 +312,6 @@ async def create_job(
 ):
     tmp_path = await persist_upload(file)
     original_filename = file.filename
-    prompt_value = normalize_prompt(prompt)
 
     job_id = str(uuid4())
     JOBS[job_id] = {"status": "queued", "result": None, "error": None, "created_at": time.time()}
@@ -324,7 +325,7 @@ async def create_job(
         rewrite,
         job_id,
         original_filename,
-        prompt_value,
+        prompt,
     )
 
     cleanup_jobs()
