@@ -38,7 +38,10 @@ export default function Navbar() {
 
         <nav className="hidden items-center space-x-4 md:flex">
           {links.map((link) => {
-            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            const active =
+              link.href === "/"
+                ? pathname === "/"
+                : pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
@@ -61,7 +64,10 @@ export default function Navbar() {
         <div className="md:hidden border-t border-white/10 bg-black/80 backdrop-blur-sm">
           <nav className="flex flex-col px-4 py-2 space-y-1">
             {links.map((link) => {
-              const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+              const active =
+                link.href === "/"
+                  ? pathname === "/"
+                  : pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
                   key={link.href}

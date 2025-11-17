@@ -175,7 +175,7 @@ export default function TranscriptionsPage() {
                     <span>Råtranskripsjon</span>
                     {record.raw_transcript && (
                       <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
-                        {Math.max(record.raw_transcript.length, 0)} tegn
+                        {record.raw_transcript.length} tegn
                       </span>
                     )}
                   </div>
@@ -188,7 +188,7 @@ export default function TranscriptionsPage() {
                     <span>Renskrevet</span>
                     {record.clean_transcript && (
                       <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
-                        {Math.max(record.clean_transcript.length, 0)} tegn
+                        {record.clean_transcript.length} tegn
                       </span>
                     )}
                   </div>
