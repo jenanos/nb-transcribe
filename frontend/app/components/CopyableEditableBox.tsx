@@ -41,8 +41,8 @@ export default function CopyableEditableBox({
   };
 
   return (
-    <div className="relative p-4 rounded-xl bg-black/60 backdrop-blur-md border border-white/10">
-      <div className="flex justify-between items-center mb-2">
+    <div className="relative flex flex-col gap-3 rounded-xl border border-white/10 bg-black/60 p-4 backdrop-blur-md">
+      <div className="flex items-center justify-between">
         <h3 className="font-orbitron text-xl text-pink-400">{title}</h3>
         <div className="flex gap-2">
           <button
@@ -67,27 +67,29 @@ export default function CopyableEditableBox({
       </div>
 
       {isEditing ? (
-        <div>
+        <div className="flex flex-col gap-2">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={8}
-            className="w-full p-2 bg-black/50 text-white border border-pink-400 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            className="h-64 w-full rounded-md border border-pink-400 bg-black/50 p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
           />
           <button
             onClick={handleSave}
-            className="mt-2 px-4 py-2 bg-pink-500 rounded hover:bg-pink-600"
+            className="self-start rounded bg-pink-500 px-4 py-2 hover:bg-pink-600"
             type="button"
           >
             Lagre
           </button>
         </div>
       ) : (
-        <pre className="whitespace-pre-wrap">{text}</pre>
+        <div className="max-h-96 min-h-[16rem] overflow-y-auto rounded-lg border border-white/5 bg-black/40 p-3">
+          <pre className="whitespace-pre-wrap text-sm leading-relaxed">{text}</pre>
+        </div>
       )}
 
       {copied && (
-        <div className="absolute top-2 right-12 bg-cyan-500 text-black px-2 py-1 rounded text-sm">
+        <div className="absolute right-12 top-2 rounded bg-cyan-500 px-2 py-1 text-sm text-black">
           Kopiert!
         </div>
       )}
