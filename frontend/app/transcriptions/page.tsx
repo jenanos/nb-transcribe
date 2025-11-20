@@ -23,6 +23,12 @@ interface TranscriptionRecord {
   error_message: string | null;
 }
 
+type ModalContent = {
+  title: string;
+  text: string;
+  canCopy: boolean;
+};
+
 const formatDateTime = (value: string | null) => {
   if (!value) return "—";
   const date = new Date(value);
@@ -40,6 +46,8 @@ export default function TranscriptionsPage() {
   const [records, setRecords] = useState<TranscriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalContent, setModalContent] = useState<ModalContent | null>(null);
+  const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -59,6 +67,28 @@ export default function TranscriptionsPage() {
 
     fetchData();
   }, []);
+
+  const handleCopy = async (label: string, text?: string | null) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedLabel(label);
+      setTimeout(() => setCopiedLabel(null), 1500);
+    } catch (err) {
+      console.error("clipboard error", err);
+    }
+  };
+
+  const openModal = (title: string, text: string | null) => {
+    const safeText = text ?? "Ingen tekst";
+    setModalContent({
+      title,
+      text: safeText,
+      canCopy: Boolean(text),
+    });
+  };
+
+  const closeModal = () => setModalContent(null);
 
   return (
     <div className="relative min-h-screen text-white">
@@ -173,33 +203,110 @@ export default function TranscriptionsPage() {
                 <div className="rounded-lg border border-white/10 bg-white/5 p-3">
                   <div className="mb-2 flex items-center justify-between text-xs text-gray-300">
                     <span>Råtranskripsjon</span>
-                    {record.raw_transcript && (
-                      <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
-                        {record.raw_transcript.length} tegn
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {record.raw_transcript && (
+                        <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
+                          {record.raw_transcript.length} tegn
+                        </span>
+                      )}
+                      {record.raw_transcript && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(`${record.job_id}-raw`, record.raw_transcript)}
+                          className="flex items-center justify-center rounded border border-cyan-300/50 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-500/20"
+                          title="Kopier råtranskripsjon"
+                        >
+                          <span className="material-icons text-sm leading-none">content_copy</span>
+                        </button>
+                      )}
+                      {copiedLabel === `${record.job_id}-raw` && (
+                        <span className="text-[10px] text-cyan-200">Kopiert!</span>
+                      )}
+                    </div>
                   </div>
-                  <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-gray-100">
-                    {record.raw_transcript || "Ingen tekst"}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openModal("Råtranskripsjon", record.raw_transcript)}
+                    className="w-full text-left"
+                  >
+                    <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-gray-100 transition hover:text-white">
+                      {record.raw_transcript || "Ingen tekst"}
+                    </p>
+                  </button>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-white/5 p-3">
                   <div className="mb-2 flex items-center justify-between text-xs text-gray-300">
                     <span>Renskrevet</span>
-                    {record.clean_transcript && (
-                      <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
-                        {record.clean_transcript.length} tegn
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {record.clean_transcript && (
+                        <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
+                          {record.clean_transcript.length} tegn
+                        </span>
+                      )}
+                      {record.clean_transcript && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(`${record.job_id}-clean`, record.clean_transcript)}
+                          className="flex items-center justify-center rounded border border-cyan-300/50 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-500/20"
+                          title="Kopier renskrevet"
+                        >
+                          <span className="material-icons text-sm leading-none">content_copy</span>
+                        </button>
+                      )}
+                      {copiedLabel === `${record.job_id}-clean` && (
+                        <span className="text-[10px] text-cyan-200">Kopiert!</span>
+                      )}
+                    </div>
                   </div>
-                  <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-gray-100">
-                    {record.clean_transcript || "Ingen tekst"}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openModal("Renskrevet", record.clean_transcript)}
+                    className="w-full text-left"
+                  >
+                    <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-gray-100 transition hover:text-white">
+                      {record.clean_transcript || "Ingen tekst"}
+                    </p>
+                  </button>
                 </div>
               </div>
             </article>
           ))}
         </div>
+
+        {modalContent && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 py-8">
+            <div className="relative w-full max-w-4xl rounded-2xl border border-cyan-400/50 bg-black/90 p-6 shadow-[0_0_30px_#00e5ff]">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <h3 className="font-orbitron text-xl text-cyan-200">{modalContent.title}</h3>
+                <div className="flex gap-2">
+                  {modalContent.canCopy && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy("modal", modalContent.text)}
+                      className="flex items-center justify-center gap-1 rounded border border-cyan-300/60 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/20"
+                      title="Kopier tekst"
+                    >
+                      <span className="material-icons text-sm">content_copy</span>
+                      Kopier
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="flex items-center justify-center gap-1 rounded border border-white/20 bg-white/5 px-3 py-1 text-xs font-medium text-gray-100 transition hover:bg-white/10"
+                    title="Lukk"
+                  >
+                    <span className="material-icons text-sm">close</span>
+                    Lukk
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-white/10 bg-white/5 p-4">
+                <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-100">{modalContent.text}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
