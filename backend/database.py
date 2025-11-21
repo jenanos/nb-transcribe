@@ -162,3 +162,43 @@ def list_transcription_records(limit: int = 50) -> list[dict[str, Any]]:
     except SQLAlchemyError as exc:
         logger.error("Failed to list transcriptions: %s", exc)
         return []
+
+
+def get_transcription_record(job_id: str) -> Optional[Dict[str, Any]]:
+    """Fetches a single transcription record by job_id."""
+    if _SESSION_FACTORY is None:
+        return None
+
+    try:
+        with _SESSION_FACTORY() as session:
+            record = (
+                session.query(TranscriptionRecord)
+                .filter(TranscriptionRecord.job_id == job_id)
+                .first()
+            )
+
+            if not record:
+                return None
+
+            return {
+                "id": record.id,
+                "job_id": record.job_id,
+                "raw": record.raw_transcript,
+                "clean": record.clean_transcript,
+                "metadata": {
+                    "rewrite_mode": record.rewrite_mode,
+                    "rewrite_enabled": record.rewrite_enabled,
+                    "prompt": record.prompt,
+                    "audio_duration_seconds": record.audio_duration_seconds,
+                    "input_size_bytes": record.input_size_bytes,
+                    "original_filename": record.original_filename,
+                    "model_id": record.model_id,
+                    **(record.metadata_json or {}),
+                },
+                "status": record.status,
+                "error": record.error_message,
+                "created_at": record.created_at.timestamp() if record.created_at else None,
+            }
+    except SQLAlchemyError as exc:
+        logger.error("Failed to get transcription %s: %s", job_id, exc)
+        return None

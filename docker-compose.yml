@@ -12,6 +12,7 @@ services:
     container_name: nb-transcribe-backend
     environment:
       - HF_TOKEN=${HF_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DATABASE_URL=postgresql+psycopg://nbtranscribe:nbtranscribe@db:5432/nbtranscribe
     deploy:
       resources:

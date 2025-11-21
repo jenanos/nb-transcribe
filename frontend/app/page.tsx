@@ -65,6 +65,7 @@ const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<string>(MODE_OPTIONS[0].value);
+  const [rewriteModel, setRewriteModel] = useState<string>("gemini");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ raw: string; clean: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +124,7 @@ export default function Home() {
     formData.append("file", file);
     formData.append("mode", selectedMode);
     formData.append("rewrite", String(rewrite));
+    formData.append("model", rewriteModel);
     setLastMode(selectedMode);
 
     if (MOCK_MODE) {
@@ -359,6 +361,19 @@ export default function Home() {
               </select>
             </div>
 
+            {/* Model Selection */}
+            <div>
+              <label className="font-orbitron text-lg text-cyan-300">Omskrivingsmotor</label>
+              <select
+                value={rewriteModel}
+                onChange={(e) => setRewriteModel(e.target.value)}
+                className="mt-2 block w-full pl-3 pr-10 py-3 rounded-md bg-black/50 text-white border border-pink-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              >
+                <option value="gemini">Gemini</option>
+                <option value="gemma">Gemma</option>
+              </select>
+            </div>
+
             {/* Rewrite */}
             <label className="flex items-center gap-2">
               <input
@@ -367,7 +382,7 @@ export default function Home() {
                 onChange={(e) => setRewrite(e.target.checked)}
                 className="accent-pink-500"
               />
-              <span>Renskriv med Gemma-3</span>
+              <span>Renskriv med valgt motor</span>
             </label>
 
             {/* Submit */}
