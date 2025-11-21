@@ -18,14 +18,15 @@ from database import (
     list_transcription_records,
     save_transcription_record,
     setup_database,
+    get_transcription_record,
 )
 
 DEV_STUB = os.environ.get("DEV_STUB") == "1"
 logger = logging.getLogger(__name__)
 
-# ---------------------------
+# --------------------------- 
 # 1) Opprett app TIDLIG
-# ---------------------------
+# --------------------------- 
 app = FastAPI()
 
 # CORS er ikke nødvendig når du proxier via Next.js, men det skader ikke å la stå
@@ -46,46 +47,13 @@ def get_asr_pipeline():
 
     return create_asr_pipeline()
 
-
-@lru_cache(maxsize=1)
-def get_rewriter_pipeline():
-    if DEV_STUB:
-        raise RuntimeError("Rewriter-pipeline er deaktivert i DEV_STUB-modus.")
-    from rewriter import create_rewriter_pipeline  # Importer lokalt for å utsette kostnaden
-
-    return create_rewriter_pipeline()
-
-
-def _warm_pipelines():
-    if DEV_STUB:
-        return
-    try:
-        get_asr_pipeline()
-    except Exception as exc:  # pragma: no cover - kun logg
-        logger.warning("Klarte ikke å varme opp ASR-pipeline: %s", exc)
-
-    if os.environ.get("HF_TOKEN"):
-        try:
-            get_rewriter_pipeline()
-        except Exception as exc:  # pragma: no cover - kun logg
-            logger.warning("Klarte ikke å varme opp rewriter-pipeline: %s", exc)
-
-
 @app.on_event("startup")
 async def setup_database_on_startup():
     setup_database()
 
 
-@app.on_event("startup")
-async def warm_pipelines_on_startup():
-    if DEV_STUB:
-        return
-    loop = asyncio.get_running_loop()
-    loop.run_in_executor(None, _warm_pipelines)
-
-
 UPLOAD_CHUNK_SIZE = 1024 * 1024
-JOB_TTL_SECONDS = 60 * 30  # behold ferdige jobber i 30 minutter
+JOB_TTL_SECONDS = 60 * 5  # behold ferdige jobber i minnet i 5 minutter (fallback til DB)
 
 
 def normalize_prompt(value: Optional[str]) -> Optional[str]:
@@ -118,15 +86,16 @@ def cleanup_jobs(now: Optional[float] = None) -> None:
     for job_id in expired_ids:
         JOBS.pop(job_id, None)
 
-# ---------------------------
+# --------------------------- 
 # 2) Felles transkriberingsfunksjon
-# ---------------------------
+# --------------------------- 
 def run_transcribe_pipeline(
     input_path: str,
     mode: str,
     rewrite: bool,
     prompt: Optional[str] = None,
     original_filename: Optional[str] = None,
+    model: str = "gemini",
 ) -> Dict[str, Any]:
     """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
 
@@ -138,6 +107,7 @@ def run_transcribe_pipeline(
         "original_filename": original_filename,
         "model_id": os.environ.get("MODEL_ID"),
         "requested_at": time.time(),
+        "rewrite_model": model,
     }
 
     with contextlib.suppress(OSError):
@@ -156,9 +126,9 @@ def run_transcribe_pipeline(
                 "[DEV] Stub arbeidsflyt\n"
                 "Oppgave 1: Følg opp Geir om status på prosjektet.\n"
                 "Prompt:\n"
-                "\"\"\"\n"
+                '"""\n'
                 "Du er en assistent som skriver en e-post til Geir. Oppsummer status og be om oppdatering.\n"
-                "\"\"\""
+                '"""'
             ),
         }
         clean_text = clean_stub_map.get(mode, "[DEV] Stub renskrevet tekst") if rewrite else None
@@ -177,7 +147,6 @@ def run_transcribe_pipeline(
         transcribe_segments,
     )
     from rewriter import rewrite_text
-    import torch  # type: ignore[import-not-found]
 
     wav_path: Optional[str] = None
     segments_dir: Optional[str] = None
@@ -201,13 +170,10 @@ def run_transcribe_pipeline(
         # ASR
         asr = get_asr_pipeline()
         raw_transcript = transcribe_segments(asr, segments)
-        torch.cuda.empty_cache()
 
         clean_transcript = None
         if rewrite:
-            rewriter = get_rewriter_pipeline()
-            clean_transcript = rewrite_text(rewriter, raw_transcript, mode, prompt)
-            torch.cuda.empty_cache()
+            clean_transcript = rewrite_text(raw_transcript, mode, prompt, model)
 
         return {"raw": raw_transcript, "clean": clean_transcript, "metadata": metadata}
     finally:
@@ -219,23 +185,27 @@ def run_transcribe_pipeline(
         with contextlib.suppress(FileNotFoundError):
             os.remove(input_path)
 
-# ---------------------------
+# --------------------------- 
 # 3) Synkront endepunkt (nyttig lokalt / uten Cloudflare)
-# ---------------------------
+# --------------------------- 
 @app.post("/process/")
 async def process(
     file: UploadFile = File(...),
     mode: str = Form("summary"),
     rewrite: bool = Form(True),
     prompt: Optional[str] = Form(None),
+    model: str = Form("gemini"),
 ):
+    if model not in ("gemini", "gemma"):
+        return JSONResponse({"error": f"Invalid model: {model}. Must be 'gemini' or 'gemma'"}, status_code=400)
+
     original_filename = file.filename
     tmp_path = await persist_upload(file)
 
     job_id = str(uuid4())
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, prompt, original_filename
+        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, prompt, original_filename, model
     )
 
     metadata = result.get("metadata") or {}
@@ -254,10 +224,10 @@ async def process(
     payload = {"job_id": job_id, **result}
     return JSONResponse(payload)
 
-# ---------------------------
+# --------------------------- 
 # 4) Enkel "jobbkø" i minne + async endepunkt (for Cloudflare)
-# ---------------------------
-executor = ThreadPoolExecutor(max_workers=1)  # kjør én jobb om gangen (GPU)
+# --------------------------- 
+executor = ThreadPoolExecutor(max_workers=1)  # kjør én jobb om gangen (GPU) 
 JOBS: Dict[str, Dict[str, Any]] = {}         # {job_id: {status, result, error}}
 
 def _submit_job(
@@ -267,6 +237,7 @@ def _submit_job(
     job_id: str,
     original_filename: Optional[str] = None,
     prompt: Optional[str] = None,
+    model: str = "gemini",
 ):
     prompt = normalize_prompt(prompt)
     metadata_for_db: Dict[str, Any] = {
@@ -277,7 +248,7 @@ def _submit_job(
     }
     try:
         JOBS[job_id]["status"] = "running"
-        result = run_transcribe_pipeline(file_path, mode, rewrite, prompt, original_filename)
+        result = run_transcribe_pipeline(file_path, mode, rewrite, prompt, original_filename, model)
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["result"] = result
         metadata_for_db = result.get("metadata", metadata_for_db)
@@ -314,7 +285,11 @@ async def create_job(
     mode: str = Form("summary"),
     rewrite: bool = Form(True),
     prompt: Optional[str] = Form(None),
+    model: str = Form("gemini"),
 ):
+    if model not in ("gemini", "gemma"):
+        return JSONResponse({"error": f"Invalid model: {model}. Must be 'gemini' or 'gemma'"}, status_code=400)
+
     tmp_path = await persist_upload(file)
     original_filename = file.filename
 
@@ -331,6 +306,7 @@ async def create_job(
         job_id,
         original_filename,
         prompt,
+        model,
     )
 
     cleanup_jobs()
@@ -339,14 +315,34 @@ async def create_job(
 @app.get("/jobs/{job_id}")
 async def get_job(job_id: str):
     cleanup_jobs()
+    
+    # 1. Sjekk minne først (raskest for pågående jobber)
     job = JOBS.get(job_id)
-    if not job:
-        return JSONResponse({"error": "Not found"}, status_code=404)
-    if job["status"] == "done":
-        return JSONResponse({"status": "done", "result": job["result"]})
-    if job["status"] == "error":
-        return JSONResponse({"status": "error", "error": job["error"]}, status_code=500)
-    return JSONResponse({"status": job["status"]})
+    if job:
+        if job["status"] == "done":
+            return JSONResponse({"status": "done", "result": job["result"]})
+        if job["status"] == "error":
+            return JSONResponse({"status": "error", "error": job["error"]}, status_code=500)
+        return JSONResponse({"status": job["status"]})
+
+    # 2. Fallback til database
+    if is_database_configured():
+        record = get_transcription_record(job_id)
+        if record:
+            if record["status"] == "done":
+                # Rekonstruer result-objektet slik frontend forventer det
+                result = {
+                    "raw": record["raw"],
+                    "clean": record["clean"],
+                    "metadata": record["metadata"]
+                }
+                return JSONResponse({"status": "done", "result": result})
+            elif record["status"] == "error":
+                return JSONResponse({"status": "error", "error": record["error"]}, status_code=500)
+            else:
+                return JSONResponse({"status": record["status"]})
+
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 
 @app.get("/transcriptions")
@@ -362,5 +358,4 @@ async def get_transcriptions(limit: int = 50):
 @app.on_event("shutdown")
 async def shutdown_event():
     get_asr_pipeline.cache_clear()
-    get_rewriter_pipeline.cache_clear()
     executor.shutdown(wait=False)
