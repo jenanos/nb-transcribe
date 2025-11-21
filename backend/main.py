@@ -13,6 +13,7 @@ from functools import lru_cache
 from uuid import uuid4
 from typing import Dict, Any, Optional
 
+from database import (
     is_database_configured,
     list_transcription_records,
     save_transcription_record,
@@ -125,9 +126,9 @@ def run_transcribe_pipeline(
                 "[DEV] Stub arbeidsflyt\n"
                 "Oppgave 1: Følg opp Geir om status på prosjektet.\n"
                 "Prompt:\n"
-                """\n"
+                '"""\n'
                 "Du er en assistent som skriver en e-post til Geir. Oppsummer status og be om oppdatering.\n"
-                """"
+                '"""'
             ),
         }
         clean_text = clean_stub_map.get(mode, "[DEV] Stub renskrevet tekst") if rewrite else None
@@ -195,6 +196,9 @@ async def process(
     prompt: Optional[str] = Form(None),
     model: str = Form("gemini"),
 ):
+    if model not in ("gemini", "gemma"):
+        return JSONResponse({"error": f"Invalid model: {model}. Must be 'gemini' or 'gemma'"}, status_code=400)
+
     original_filename = file.filename
     tmp_path = await persist_upload(file)
 
@@ -283,6 +287,9 @@ async def create_job(
     prompt: Optional[str] = Form(None),
     model: str = Form("gemini"),
 ):
+    if model not in ("gemini", "gemma"):
+        return JSONResponse({"error": f"Invalid model: {model}. Must be 'gemini' or 'gemma'"}, status_code=400)
+
     tmp_path = await persist_upload(file)
     original_filename = file.filename
 

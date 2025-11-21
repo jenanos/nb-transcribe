@@ -85,33 +85,30 @@ def rewrite_text_gemini(text: str, mode: str, prompt: str | None) -> str:
     model_id = os.environ.get("GEMINI_MODEL", "gemini-3.0-pro-exp")
 
     if not api_key:
-        return "Feil: GEMINI_API_KEY er ikke satt i miljøvariablene."
+        raise RuntimeError("GEMINI_API_KEY er ikke satt i miljøvariablene.")
 
     # Kopier miljøvariabler og sett API-nøkkelen
     env = os.environ.copy()
     env["GEMINI_API_KEY"] = api_key
 
-    cmd = ['gemini', '--prompt', full_prompt, '--model', model_id]
+    cmd = ['gemini', '--model', model_id]
 
     try:
-        # Vi bruker input=None fordi vi sender prompt som argument. 
-        # Hvis prompten er veldig lang, burde vi kanskje pipe den inn via stdin,
-        # men CLI-dokumentasjonen viser -p flagget.
+        # Vi sender prompten via stdin for å unngå argument-lengdebegrensninger.
         result = subprocess.run(
             cmd,
+            input=full_prompt,
             capture_output=True,
             text=True,
             check=True,
             encoding='utf-8',
             env=env
         )
-        # Gemini CLI returnerer ofte markdown, vi vil kanskje rense det litt?
-        # For nå returnerer vi stdout direkte.
         return result.stdout.strip()
     except FileNotFoundError:
-        return "Feil: 'gemini'-kommandoen ble ikke funnet. Sørg for at Gemini CLI er installert og i din PATH."
+        raise RuntimeError("'gemini'-kommandoen ble ikke funnet. Sørg for at Gemini CLI er installert og i din PATH.")
     except subprocess.CalledProcessError as e:
-        return f"Feil under kjøring av Gemini CLI: {e.stderr}"
+        raise RuntimeError(f"Feil under kjøring av Gemini CLI: {e.stderr}")
 
 def rewrite_text(text: str, mode: str, prompt: str | None, model: str = "gemini") -> str:
     """Velger omskrivingsmotor basert på 'model'-parameteren."""
