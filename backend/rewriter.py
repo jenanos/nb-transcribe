@@ -82,7 +82,7 @@ def rewrite_text_gemini(text: str, mode: str, prompt: str | None) -> str:
     full_prompt = f"{system_text}\n\n{user_text}"
     
     api_key = os.environ.get("GEMINI_API_KEY")
-    model_id = os.environ.get("GEMINI_MODEL", "gemini-3.0-pro-exp")
+    model_id = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
 
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY er ikke satt i miljøvariablene.")
