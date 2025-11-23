@@ -22,7 +22,6 @@ export async function GET(
           status: "done",
           result: {
             raw: "Dette er en mock-transkripsjon fra NB-transcribe.",
-            clean: "Mock: En renskrevet versjon generert for demonstrasjonen.",
           },
         }
       : { job_id: jobId, status: "queued" };

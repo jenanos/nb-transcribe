@@ -1,4 +1,4 @@
-# Minimal deps to run backend unit tests in DEV_STUB mode (no GPU / torch needed)
+# Minimal deps to run backend unit tests without pulling heavy GPU dependencies
 fastapi
 starlette
 httpx

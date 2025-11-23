@@ -9,14 +9,11 @@ interface TranscriptionRecord {
   id: number;
   job_id: string;
   raw_transcript: string | null;
-  clean_transcript: string | null;
-  rewrite_mode: string | null;
-  rewrite_enabled: boolean;
-  prompt: string | null;
   audio_duration_seconds: number | null;
   input_size_bytes: number | null;
   original_filename: string | null;
   model_id: string | null;
+  metadata_json?: Record<string, unknown> | null;
   created_at: string | null;
   completed_at: string | null;
   status: string;
@@ -105,8 +102,8 @@ export default function TranscriptionsPage() {
               Lagrede transkripsjoner
             </h1>
             <p className="max-w-2xl text-sm text-gray-200 md:text-base">
-              Her finner du alle transkripsjoner og bearbeidelser som er lagret i databasen.
-              Klikk deg tilbake til forsiden for å laste opp nye filer eller start en ny jobb.
+              Her finner du alle transkripsjoner som er lagret i databasen. Klikk deg tilbake til forsiden for å laste opp nye
+              filer eller start en ny jobb.
             </p>
           </div>
           <Link
@@ -125,9 +122,7 @@ export default function TranscriptionsPage() {
         )}
 
         {error && (
-          <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">
-            {error}
-          </div>
+          <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>
         )}
 
         {!loading && !error && records.length === 0 && (
@@ -156,11 +151,7 @@ export default function TranscriptionsPage() {
                         : "bg-yellow-500/20 text-yellow-100"
                   }`}
                 >
-                  {record.status === "done"
-                    ? "Ferdig"
-                    : record.status === "error"
-                      ? "Feil"
-                      : record.status}
+                  {record.status === "done" ? "Ferdig" : record.status === "error" ? "Feil" : record.status}
                 </span>
               </div>
 
@@ -174,23 +165,14 @@ export default function TranscriptionsPage() {
                   <p>{record.original_filename || "—"}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-400">Modus</p>
-                  <p>
-                    {record.rewrite_mode || "—"} {record.rewrite_enabled ? "(med renskriving)" : "(kun rå)"}
-                  </p>
-                </div>
-                <div>
                   <p className="text-xs uppercase tracking-wide text-gray-400">Modell</p>
                   <p>{record.model_id || "—"}</p>
                 </div>
-              </div>
-
-              {record.prompt && (
-                <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-gray-100">
-                  <p className="mb-1 text-[11px] uppercase tracking-wide text-gray-300">Tilpasset prompt</p>
-                  <p className="whitespace-pre-wrap">{record.prompt}</p>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-400">Varighet</p>
+                  <p>{record.audio_duration_seconds ? `${record.audio_duration_seconds.toFixed(1)} s` : "—"}</p>
                 </div>
-              )}
+              </div>
 
               {record.error_message && (
                 <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-100">
@@ -199,75 +181,39 @@ export default function TranscriptionsPage() {
                 </div>
               )}
 
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                  <div className="mb-2 flex items-center justify-between text-xs text-gray-300">
-                    <span>Råtranskripsjon</span>
-                    <div className="flex items-center gap-2">
-                      {record.raw_transcript && (
-                        <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
-                          {record.raw_transcript.length} tegn
-                        </span>
-                      )}
-                      {record.raw_transcript && (
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(`${record.job_id}-raw`, record.raw_transcript)}
-                          className="flex items-center justify-center rounded border border-cyan-300/50 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-500/20"
-                          title="Kopier råtranskripsjon"
-                        >
-                          <span className="material-icons text-sm leading-none">content_copy</span>
-                        </button>
-                      )}
-                      {copiedLabel === `${record.job_id}-raw` && (
-                        <span className="text-[10px] text-cyan-200">Kopiert!</span>
-                      )}
-                    </div>
+              <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                <div className="mb-2 flex items-center justify-between text-xs text-gray-300">
+                  <span>Råtranskripsjon</span>
+                  <div className="flex items-center gap-2">
+                    {record.raw_transcript && (
+                      <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
+                        {record.raw_transcript.length} tegn
+                      </span>
+                    )}
+                    {record.raw_transcript && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(`${record.job_id}-raw`, record.raw_transcript)}
+                        className="flex items-center justify-center rounded border border-cyan-300/50 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-500/20"
+                        title="Kopier råtranskripsjon"
+                      >
+                        <span className="material-icons text-sm leading-none">content_copy</span>
+                      </button>
+                    )}
+                    {copiedLabel === `${record.job_id}-raw` && (
+                      <span className="text-[10px] text-cyan-200">Kopiert!</span>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openModal("Råtranskripsjon", record.raw_transcript)}
-                    className="w-full text-left"
-                  >
-                    <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-gray-100 transition hover:text-white">
-                      {record.raw_transcript || "Ingen tekst"}
-                    </p>
-                  </button>
                 </div>
-                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                  <div className="mb-2 flex items-center justify-between text-xs text-gray-300">
-                    <span>Renskrevet</span>
-                    <div className="flex items-center gap-2">
-                      {record.clean_transcript && (
-                        <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-gray-100">
-                          {record.clean_transcript.length} tegn
-                        </span>
-                      )}
-                      {record.clean_transcript && (
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(`${record.job_id}-clean`, record.clean_transcript)}
-                          className="flex items-center justify-center rounded border border-cyan-300/50 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-500/20"
-                          title="Kopier renskrevet"
-                        >
-                          <span className="material-icons text-sm leading-none">content_copy</span>
-                        </button>
-                      )}
-                      {copiedLabel === `${record.job_id}-clean` && (
-                        <span className="text-[10px] text-cyan-200">Kopiert!</span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openModal("Renskrevet", record.clean_transcript)}
-                    className="w-full text-left"
-                  >
-                    <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-gray-100 transition hover:text-white">
-                      {record.clean_transcript || "Ingen tekst"}
-                    </p>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => openModal("Råtranskripsjon", record.raw_transcript)}
+                  className="w-full text-left"
+                >
+                  <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm text-gray-100 transition hover:text-white">
+                    {record.raw_transcript || "Ingen tekst"}
+                  </p>
+                </button>
               </div>
             </article>
           ))}

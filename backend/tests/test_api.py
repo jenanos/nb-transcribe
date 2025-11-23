@@ -1,5 +1,7 @@
 import importlib
 import io
+import importlib
+import io
 import json
 import time
 from pathlib import Path
@@ -8,54 +10,61 @@ import pytest
 from starlette.datastructures import UploadFile
 
 
+def _patch_transcribe(monkeypatch, tmp_path: Path):
+    import transcribe
+
+    seg_dir = tmp_path / "segments"
+    seg_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_to_wav(input_path: str, sampling_rate: int = 16000) -> str:  # noqa: ARG002
+        return input_path
+
+    def fake_segment_wav(wav_path: str, segment_length_s: int = 30):  # noqa: ARG002
+        seg_path = seg_dir / "seg_000.wav"
+        seg_path.write_bytes(b"fake")
+        return [str(seg_path)], str(seg_dir)
+
+    def fake_transcribe_segments(_asr, segments: list[str]):  # noqa: ARG002
+        assert segments, "segments expected"
+        return "stubbet transkripsjon"
+
+    monkeypatch.setattr(transcribe, "to_wav", fake_to_wav)
+    monkeypatch.setattr(transcribe, "segment_wav", fake_segment_wav)
+    monkeypatch.setattr(transcribe, "transcribe_segments", fake_transcribe_segments)
+
+
 @pytest.fixture()
-def stubbed_main(monkeypatch):
-    monkeypatch.setenv("DEV_STUB", "1")
+def patched_main(monkeypatch, tmp_path):
     import main
 
+    _patch_transcribe(monkeypatch, tmp_path)
     module = importlib.reload(main)
+    monkeypatch.setattr(module, "get_asr_pipeline", lambda: None)
+    monkeypatch.setattr(module, "JOBS", {})
     try:
         yield module
     finally:
-        monkeypatch.delenv("DEV_STUB", raising=False)
-        importlib.reload(module)
+        importlib.reload(main)
 
 
 @pytest.mark.asyncio
-async def test_process_endpoint_uses_stub(stubbed_main):
+async def test_process_endpoint_transcribes(patched_main):
     upload = UploadFile(filename="test.wav", file=io.BytesIO(b"fake-bytes"))
-    response = await stubbed_main.process(upload, mode="summary", rewrite=True)
+    response = await patched_main.process(upload)
     await upload.close()
 
     assert response.status_code == 200
     payload = json.loads(response.body.decode())
-    assert payload["raw"] == "[DEV] Stub råtranskripsjon"
-    assert payload["clean"] == "[DEV] Stub sammendrag av transkripsjonen"
-    assert "job_id" in payload
-    assert payload["metadata"]["rewrite_mode"] == "summary"
+    assert payload["raw"] == "stubbet transkripsjon"
+    assert payload["metadata"]["original_filename"] == "test.wav"
 
 
-def test_submit_job_stubbed(tmp_path: Path, stubbed_main):
-    audio_path = tmp_path / "audio.wav"
-    audio_path.write_bytes(b"fake")
-
-    job_id = "job-123"
-    stubbed_main.JOBS[job_id] = {"status": "queued", "result": None, "error": None}
-
-    stubbed_main._submit_job(str(audio_path), "summary", True, job_id, "audio.wav", None)
-
-    job = stubbed_main.JOBS[job_id]
-    assert job["status"] == "done"
-    assert job["result"]["raw"] == "[DEV] Stub råtranskripsjon"
-    assert job["result"]["clean"] == "[DEV] Stub sammendrag av transkripsjonen"
-
-
-def test_submit_job_handles_error(tmp_path: Path, stubbed_main, monkeypatch):
+def test_submit_job_handles_error(tmp_path: Path, patched_main, monkeypatch):
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"fake")
 
     job_id = "job-error"
-    stubbed_main.JOBS[job_id] = {
+    patched_main.JOBS[job_id] = {
         "status": "queued",
         "result": None,
         "error": None,
@@ -65,10 +74,10 @@ def test_submit_job_handles_error(tmp_path: Path, stubbed_main, monkeypatch):
     def failing_pipeline(*_args, **_kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(stubbed_main, "run_transcribe_pipeline", failing_pipeline)
+    monkeypatch.setattr(patched_main, "run_transcribe_pipeline", failing_pipeline)
 
-    stubbed_main._submit_job(str(audio_path), "summary", True, job_id, "audio.wav", None)
+    patched_main._submit_job(str(audio_path), job_id, "audio.wav")
 
-    job = stubbed_main.JOBS[job_id]
+    job = patched_main.JOBS[job_id]
     assert job["status"] == "error"
     assert "boom" in job["error"]

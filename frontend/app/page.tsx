@@ -4,81 +4,28 @@ import Image from "next/image";
 import CopyableEditableBox from "@/app/components/CopyableEditableBox";
 import bgImage from "@/public/nb-transcribe-background.png";
 
-const MODE_OPTIONS = [
-  { value: "summary", label: "Sammendrag" },
-  { value: "email", label: "E-post" },
-  { value: "document", label: "Avsnitt til dokument" },
-  { value: "talking_points", label: "Talepunkter" },
-  { value: "polish", label: "Renskriving" },
-  { value: "workflow", label: "Arbeidsflyt" },
-];
-
-const CLEAN_TITLES: Record<string, string> = {
-  summary: "Omskrevet versjon",
-  email: "E-postutkast",
-  document: "Dokumentavsnitt",
-  talking_points: "Talepunkter",
-  polish: "Renskrevet versjon",
-  workflow: "Arbeidsflyt og LLM-promptforslag",
-};
-
 const MOCK_MODE = (process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
 const RAW_DIRECT_UPLOAD_BASE = process.env.NEXT_PUBLIC_DIRECT_BACKEND_URL ?? "";
 const DIRECT_UPLOAD_BASE = RAW_DIRECT_UPLOAD_BASE.trim().replace(/\/$/, "");
 const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 
-const MOCK_MODE_COPY: Record<string, { raw: string; clean?: string }> = {
-  summary: {
-    raw: "Dette er et eksempel på transkripsjonen fra et kundemøte der vi planlegger utrulling av NB-transcribe.",
-    clean:
-      "Sammendrag:\n- Vi demonstrerte NB-transcribe i et kundemøte.\n- Kunden ønsker mock-modus for porteføljen sin.\n- Neste steg er å produsere demo og dokumentasjon.",
-  },
-  email: {
-    raw: "Hei, dette er et opptak fra kundemøtet vårt om transkripsjonstjenesten.",
-    clean:
-      "Hei team,\n\nTakk for et godt møte i dag! Her er en kort oppsummering og neste steg for NB-transcribe-demoen. Jeg setter opp mock-modus i frontend og eksponerer den via Vercel slik at dere kan teste selv. Gi beskjed om dere ønsker tilgang til self-hosted backenden.\n\nMvh\nNicolai",
-  },
-  document: {
-    raw: "Dette er en lenger tekst fra transkripsjonen.",
-    clean:
-      "I dette dokumentet beskriver vi hvordan NB-transcribe settes opp i containere styrt av Portainer. Tjenesten ligger bak Cloudflare Tunnel og blir kontinuerlig oppdatert gjennom Watchtower og GitHub Actions.",
-  },
-  talking_points: {
-    raw: "Her er noen momenter vi diskuterte under callen.",
-    clean:
-      "Talepunkter:\n1. Presentasjon av NB-transcribe sin pipeline.\n2. Oppsett med Docker Compose, Portainer og automatiske oppdateringer.\n3. Sikker eksponering via Cloudflare Tunnel.\n4. Mock-modus for porteføljevisning.",
-  },
-  polish: {
-    raw: "Original tekst: vi self-hoster appen og bruker egen maskin for GPU.",
-    clean:
-      "Renskrevet versjon: Vi driver NB-transcribe på egen maskin med GPU, pakket i containere som styres via Portainer og eksponeres trygt gjennom Cloudflare Tunnel.",
-  },
-  workflow: {
-    raw: "Rå transkripsjon for arbeidsflyt.",
-    clean:
-      "Arbeidsflyt:\n1. Lydopptak lastes opp til mock-frontenden.\n2. I produksjon sendes jobben til backenden via Cloudflare Tunnel.\n3. Watchtower og GitHub Actions sørger for automatiske oppdateringer av containere.\n\nLLM-prompt forslag:\n- 'Skriv et sammendrag av møtet og fremhev hvordan infrastrukturen er automatisert.'",
-  },
-};
-
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
+const MOCK_TRANSCRIPT =
+  "Dette er et eksempel på en transkripsjon fra NB-transcribe i mock-modus. Den faktiske backenden kjører lokalt " +
+  "på min egen maskin for å beskytte maskinvaren, men UI-et og API-kontraktene er identiske med den selvhostede versjonen.";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<string>(MODE_OPTIONS[0].value);
-  const [rewriteModel, setRewriteModel] = useState<string>("gemini");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ raw: string; clean: string | null } | null>(null);
+  const [result, setResult] = useState<{ raw: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rewrite, setRewrite] = useState(true);
   const [page, setPage] = useState<"upload" | "results">("upload");
-  const [lastMode, setLastMode] = useState<string>(MODE_OPTIONS[0].value);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatusBaseUrl, setJobStatusBaseUrl] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"queued" | "running" | null>(null);
   const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
   const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cleanTitle = CLEAN_TITLES[lastMode] ?? "Omskrevet versjon";
 
   const clearPollTimeout = () => {
     if (pollTimeoutRef.current) {
@@ -113,35 +60,23 @@ export default function Home() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
-    clearPollTimeout();
-    setActiveJobId(null);
+
     setLoading(true);
     setError(null);
     setResult(null);
 
-    const selectedMode = mode;
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("mode", selectedMode);
-    formData.append("rewrite", String(rewrite));
-    formData.append("model", rewriteModel);
-    setLastMode(selectedMode);
-
     if (MOCK_MODE) {
-      const mockContent = MOCK_MODE_COPY[selectedMode] ?? MOCK_MODE_COPY.summary;
-      setJobStatus("queued");
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      setJobStatus("running");
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      setResult({
-        raw: mockContent.raw,
-        clean: rewrite && mockContent.clean ? mockContent.clean : null,
-      });
-      setLoading(false);
-      setPage("results");
-      setJobStatus(null);
+      setTimeout(() => {
+        setResult({ raw: MOCK_TRANSCRIPT });
+        setLoading(false);
+        setPage("results");
+        setJobStatus(null);
+      }, 600);
       return;
     }
+
+    const formData = new FormData();
+    formData.append("file", file);
 
     const jobEndpointBase = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/jobs` : "/api/jobs";
 
@@ -211,11 +146,7 @@ export default function Home() {
 
         if (data.status === "done") {
           const raw = data?.result?.raw ?? "";
-          const cleanValue = data?.result?.clean;
-          setResult({
-            raw,
-            clean: typeof cleanValue === "string" ? cleanValue : null,
-          });
+          setResult({ raw });
           setLoading(false);
           setPage("results");
           setActiveJobId(null);
@@ -264,24 +195,13 @@ export default function Home() {
           <div className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]">
             <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock mode enabled</h3>
             <p className="mb-3 text-sm text-gray-200">
-              This preview of NB-transcribe runs entirely in mock mode so it can be deployed to Vercel without the
-              private FastAPI backend. Outside this mock, the production pipeline pairs the Next.js interface with GPU
-              jobs that run NB-Whisper and Gemma-3 locally on an RTX 3080 for transcription, summarizing, and
-              rewriting, with the backend code and API contracts available on
-              {" "}
-              <a
-                href="https://github.com/jenanos/nb-transcribe"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-pink-400 underline"
-              >
-                GitHub
-              </a>
-              .
+              Denne forhåndsvisningen kjører kun den synlige frontenden og simulerer svar fra backenden.
+              I produksjon er backenden selvhostet med NB-Whisper Large på GPU, men den holdes privat slik
+              at maskinvaren ikke eksponeres fra Vercel-demoen.
             </p>
             <p className="mb-4 text-sm text-gray-200">
-              Day-to-day I self-host the stack in Docker containers orchestrated through Portainer, patched by
-              Watchtower, exposed behind a Cloudflare Tunnel, and deployed via GitHub Actions.
+              UI-et, API-kontraktene og transkriberingsflyten er identiske med den ekte versjonen som jeg kjører
+              bak Cloudflare Tunnel. Du kan teste det visuelle her uten å ha tilgang til min backend.
             </p>
             <button
               onClick={() => setShowMockInfo(false)}
@@ -298,8 +218,8 @@ export default function Home() {
           <div className="mt-24 w-full max-w-md rounded-xl border border-cyan-400 bg-black/90 p-5 text-sm text-gray-100 shadow-[0_0_15px_#00e5ff] pointer-events-auto">
             <h4 className="font-orbitron text-lg text-cyan-300 mb-2">File picker disabled in mock mode</h4>
             <p className="mb-3 text-gray-200">
-              Uploading custom audio is turned off here. We preloaded an example clip so you can start the transcription and optional
-              rewriting steps right away.
+              Opplasting av egne filer er skrudd av her. Vi har forhåndslastet et eksempelklipp slik at du kan se
+              transkriberingsflyten uten backend-tilgang.
             </p>
             <button
               onClick={() => setShowMockUploadNotice(false)}
@@ -349,7 +269,7 @@ export default function Home() {
                 }}
                 tabIndex={MOCK_MODE ? 0 : undefined}
                 role={MOCK_MODE ? "button" : undefined}
-                aria-disabled={MOCK_MODE ? 'true' : 'false'}
+                aria-disabled={MOCK_MODE ? "true" : "false"}
                 className="mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed border-pink-400 rounded-md cursor-pointer hover:border-cyan-400 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
               >
                 <span className="text-center text-pink-400">
@@ -367,45 +287,10 @@ export default function Home() {
               />
             </div>
 
-            {/* Mode */}
-            <div>
-              <label className="font-orbitron text-lg text-cyan-300">Type omskriving</label>
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value)}
-                className="mt-2 block w-full pl-3 pr-10 py-3 rounded-md bg-black/50 text-white border border-pink-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-              >
-                {MODE_OPTIONS.map(({ value: optionValue, label }) => (
-                  <option key={optionValue} value={optionValue}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Model Selection */}
-            <div>
-              <label className="font-orbitron text-lg text-cyan-300">Omskrivingsmotor</label>
-              <select
-                value={rewriteModel}
-                onChange={(e) => setRewriteModel(e.target.value)}
-                className="mt-2 block w-full pl-3 pr-10 py-3 rounded-md bg-black/50 text-white border border-pink-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-              >
-                <option value="gemini">Gemini</option>
-                <option value="gemma">Gemma</option>
-              </select>
-            </div>
-
-            {/* Rewrite */}
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={rewrite}
-                onChange={(e) => setRewrite(e.target.checked)}
-                className="accent-pink-500"
-              />
-              <span>Renskriv med valgt motor</span>
-            </label>
+            <p className="text-sm text-gray-300">
+              Fila sendes til NB-Whisper Large for transkribering. I denne demoen kjører modellen lokalt og holdes privat; Vercel
+              frontenden viser kun resultatet.
+            </p>
 
             {/* Submit */}
             <button
@@ -413,12 +298,12 @@ export default function Home() {
               className="w-full py-3 rounded-lg bg-pink-500 text-white font-bold shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
               disabled={loading}
             >
-              {loading ? "Behandler..." : "Start Transkribering"}
+              {loading ? "Behandler..." : "Start transkribering"}
             </button>
             {loading && (
               <div className="text-center text-sm text-cyan-300">
                 {jobStatus === "running"
-                  ? "Jobben kjører – transkriberer og renskriver."
+                  ? "Jobben kjører – transkriberer med NB-Whisper."
                   : "Jobb lagt i kø – starter om et øyeblikk."}
               </div>
             )}
@@ -437,9 +322,6 @@ export default function Home() {
           {result && (
             <div className="w-full max-w-3xl mx-auto space-y-6">
               <CopyableEditableBox title="Transkripsjon" content={result.raw} />
-              {result.clean && (
-                <CopyableEditableBox title={cleanTitle} content={result.clean} />
-              )}
             </div>
           )}
         </main>
@@ -450,16 +332,14 @@ export default function Home() {
         <nav className="flex justify-around items-center h-16">
           <button
             onClick={() => setPage("upload")}
-            className={`flex flex-col items-center ${page === "upload" ? "text-cyan-300" : "text-gray-400 hover:text-cyan-300"
-              }`}
+            className={`flex flex-col items-center ${page === "upload" ? "text-cyan-300" : "text-gray-400 hover:text-cyan-300"}`}
           >
             <span className="material-icons text-3xl">upload_file</span>
             <span className="text-xs">Opplasting</span>
           </button>
           <button
             onClick={() => setPage("results")}
-            className={`flex flex-col items-center ${page === "results" ? "text-cyan-300" : "text-gray-400 hover:text-cyan-300"
-              }`}
+            className={`flex flex-col items-center ${page === "results" ? "text-cyan-300" : "text-gray-400 hover:text-cyan-300"}`}
           >
             <span className="material-icons text-3xl">article</span>
             <span className="text-xs">Resultater</span>
