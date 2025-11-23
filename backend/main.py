@@ -1,6 +1,3 @@
-from fastapi import FastAPI, File, UploadFile, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 import tempfile
 import os
 import asyncio
@@ -14,15 +11,18 @@ from functools import lru_cache
 from uuid import uuid4
 from typing import Dict, Any, Optional
 
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
 from database import (
+    get_transcription_record,
     is_database_configured,
     list_transcription_records,
     save_transcription_record,
     setup_database,
-    get_transcription_record,
 )
 
-DEV_STUB = os.environ.get("DEV_STUB") == "1"
 logger = logging.getLogger(__name__)
 
 # --------------------------- 
@@ -42,8 +42,6 @@ app.add_middleware(
 
 @lru_cache(maxsize=1)
 def get_asr_pipeline():
-    if DEV_STUB:
-        raise RuntimeError("ASR-pipeline er deaktivert i DEV_STUB-modus.")
     from transcribe import create_asr_pipeline  # Importer lokalt for å utsette kostnaden
 
     return create_asr_pipeline()
@@ -55,19 +53,6 @@ async def setup_database_on_startup():
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 JOB_TTL_SECONDS = 60 * 5  # behold ferdige jobber i minnet i 5 minutter (fallback til DB)
-
-
-def normalize_prompt(value: Optional[str]) -> Optional[str]:
-    if isinstance(value, str):
-        cleaned = value.strip()
-        return cleaned or None
-    return None
-
-
-def normalize_model(model_value: Any) -> str:
-    """Return a usable model string even when called directly (outside FastAPI parsing)."""
-
-    return model_value if isinstance(model_value, str) else "gemini"
 
 
 async def persist_upload(upload: UploadFile) -> str:
@@ -98,63 +83,25 @@ def cleanup_jobs(now: Optional[float] = None) -> None:
 # --------------------------- 
 def run_transcribe_pipeline(
     input_path: str,
-    mode: str,
-    rewrite: bool,
     job_id: str,
-    prompt: Optional[str] = None,
     original_filename: Optional[str] = None,
-    model: str = "gemini",
 ) -> Dict[str, Any]:
-    """Kjører hele transkriberingsløpet og returnerer {'raw': ..., 'clean': ...}."""
+    """Kjører hele transkriberingsløpet og returnerer transkripsjonen."""
 
-    prompt = normalize_prompt(prompt)
     metadata: Dict[str, Any] = {
-        "rewrite_mode": mode,
-        "rewrite_enabled": rewrite,
-        "prompt": prompt,
         "original_filename": original_filename,
         "model_id": os.environ.get("MODEL_ID"),
         "requested_at": time.time(),
-        "rewrite_model": model,
     }
 
     with contextlib.suppress(OSError):
         metadata["input_size_bytes"] = os.path.getsize(input_path)
 
-    # Lettvekts stub for lokal utvikling og tester
-    if DEV_STUB:
-        os.remove(input_path)
-        clean_stub_map = {
-            "summary": "[DEV] Stub sammendrag av transkripsjonen",
-            "email": "[DEV] Stub e-post basert på transkripsjonen",
-            "document": "[DEV] Stub avsnitt til dokument",
-            "talking_points": "[DEV] Stub talepunkter",
-            "polish": "[DEV] Stub renskrevet tekst",
-            "workflow": (
-                "[DEV] Stub arbeidsflyt\n"
-                "Oppgave 1: Følg opp Geir om status på prosjektet.\n"
-                "Prompt:\n"
-                '"""\n'
-                "Du er en assistent som skriver en e-post til Geir. Oppsummer status og be om oppdatering.\n"
-                '"""'
-            ),
-        }
-        clean_text = clean_stub_map.get(mode, "[DEV] Stub renskrevet tekst") if rewrite else None
-        metadata.setdefault("audio_duration_seconds", 0.0)
-        metadata.setdefault("segment_count", 0)
-        return {
-            "raw": "[DEV] Stub råtranskripsjon",
-            "clean": clean_text,
-            "metadata": metadata,
-        }
-
-    # Importer tunge avhengigheter kun når vi faktisk trenger dem
     from transcribe import (
-        to_wav,
         segment_wav,
+        to_wav,
         transcribe_segments,
     )
-    from rewriter import rewrite_text
 
     wav_path: Optional[str] = None
     segments_dir: Optional[str] = None
@@ -179,23 +126,7 @@ def run_transcribe_pipeline(
         asr = get_asr_pipeline()
         raw_transcript = transcribe_segments(asr, segments)
 
-        # SAVE INTERMEDIATE RESULT
-        save_transcription_record(
-            job_id=job_id,
-            raw_text=raw_transcript,
-            clean_text=None,
-            rewrite_mode=mode,
-            rewrite_enabled=rewrite,
-            prompt=prompt,
-            metadata=metadata,
-            status="processing_rewrite" if rewrite else "done",
-        )
-
-        clean_transcript = None
-        if rewrite:
-            clean_transcript = rewrite_text(raw_transcript, mode, prompt, model)
-
-        return {"raw": raw_transcript, "clean": clean_transcript, "metadata": metadata}
+        return {"raw": raw_transcript, "metadata": metadata}
     finally:
         if segments_dir:
             shutil.rmtree(segments_dir, ignore_errors=True)
@@ -211,22 +142,14 @@ def run_transcribe_pipeline(
 @app.post("/process/")
 async def process(
     file: UploadFile = File(...),
-    mode: str = Form("summary"),
-    rewrite: bool = Form(True),
-    prompt: Optional[str] = Form(None),
-    model: str = Form("gemini"),
 ):
-    model_value = normalize_model(model)
-    if model_value not in ("gemini", "gemma"):
-        return JSONResponse({"error": f"Invalid model: {model_value}. Must be 'gemini' or 'gemma'"}, status_code=400)
-
     original_filename = file.filename
     tmp_path = await persist_upload(file)
 
     job_id = str(uuid4())
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, job_id, prompt, original_filename, model_value
+        executor, run_transcribe_pipeline, tmp_path, job_id, original_filename
     )
 
     metadata = result.get("metadata") or {}
@@ -234,10 +157,6 @@ async def process(
     save_transcription_record(
         job_id=job_id,
         raw_text=result.get("raw"),
-        clean_text=result.get("clean"),
-        rewrite_mode=mode,
-        rewrite_enabled=rewrite,
-        prompt=metadata.get("prompt"),
         metadata=metadata,
         status="done",
     )
@@ -253,33 +172,21 @@ JOBS: Dict[str, Dict[str, Any]] = {}         # {job_id: {status, result, error}}
 
 def _submit_job(
     file_path: str,
-    mode: str,
-    rewrite: bool,
     job_id: str,
     original_filename: Optional[str] = None,
-    prompt: Optional[str] = None,
-    model: str = "gemini",
 ):
-    prompt = normalize_prompt(prompt)
     metadata_for_db: Dict[str, Any] = {
-        "rewrite_mode": mode,
-        "rewrite_enabled": rewrite,
-        "prompt": prompt,
         "original_filename": original_filename,
     }
     try:
         JOBS[job_id]["status"] = "running"
-        result = run_transcribe_pipeline(file_path, mode, rewrite, job_id, prompt, original_filename, model)
+        result = run_transcribe_pipeline(file_path, job_id, original_filename=original_filename)
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["result"] = result
         metadata_for_db = result.get("metadata", metadata_for_db)
         save_transcription_record(
             job_id=job_id,
             raw_text=result.get("raw"),
-            clean_text=result.get("clean"),
-            rewrite_mode=mode,
-            rewrite_enabled=rewrite,
-            prompt=prompt,
             metadata=metadata_for_db,
             status="done",
         )
@@ -293,10 +200,6 @@ def _submit_job(
         save_transcription_record(
             job_id=job_id,
             raw_text=None,
-            clean_text=None,
-            rewrite_mode=mode,
-            rewrite_enabled=rewrite,
-            prompt=prompt,
             metadata=metadata_for_db,
             status="error",
             error_message=error_message,
@@ -307,15 +210,7 @@ def _submit_job(
 @app.post("/jobs")
 async def create_job(
     file: UploadFile = File(...),
-    mode: str = Form("summary"),
-    rewrite: bool = Form(True),
-    prompt: Optional[str] = Form(None),
-    model: str = Form("gemini"),
 ):
-    model_value = normalize_model(model)
-    if model_value not in ("gemini", "gemma"):
-        return JSONResponse({"error": f"Invalid model: {model_value}. Must be 'gemini' or 'gemma'"}, status_code=400)
-
     tmp_path = await persist_upload(file)
     original_filename = file.filename
 
@@ -327,12 +222,8 @@ async def create_job(
         executor,
         _submit_job,
         tmp_path,
-        mode,
-        rewrite,
         job_id,
         original_filename,
-        prompt,
-        model_value,
     )
 
     cleanup_jobs()
@@ -362,8 +253,7 @@ async def get_job(job_id: str):
                 # Rekonstruer result-objektet slik frontend forventer det
                 result = {
                     "raw": record["raw"],
-                    "clean": record["clean"],
-                    "metadata": record["metadata"]
+                    "metadata": record["metadata"],
                 }
                 return JSONResponse({"status": "done", "result": result})
             elif record["status"] == "error":

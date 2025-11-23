@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, JSON, String, Text, create_engine
+from sqlalchemy import BigInteger, DateTime, Float, JSON, String, Text, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -25,10 +25,6 @@ class TranscriptionRecord(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     raw_transcript: Mapped[Optional[str]] = mapped_column(Text)
-    clean_transcript: Mapped[Optional[str]] = mapped_column(Text)
-    rewrite_mode: Mapped[Optional[str]] = mapped_column(String(64))
-    rewrite_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    prompt: Mapped[Optional[str]] = mapped_column(Text)
     audio_duration_seconds: Mapped[Optional[float]] = mapped_column(Float)
     input_size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger)
     original_filename: Mapped[Optional[str]] = mapped_column(String(512))
@@ -81,10 +77,6 @@ def save_transcription_record(
     *,
     job_id: str,
     raw_text: Optional[str],
-    clean_text: Optional[str],
-    rewrite_mode: Optional[str],
-    rewrite_enabled: bool,
-    prompt: Optional[str],
     metadata: Optional[Dict[str, Any]],
     status: str,
     error_message: Optional[str] = None,
@@ -108,15 +100,6 @@ def save_transcription_record(
                 # Update existing record
                 if raw_text is not None:
                     record.raw_transcript = raw_text
-                if clean_text is not None:
-                    record.clean_transcript = clean_text
-                if rewrite_mode is not None:
-                    record.rewrite_mode = rewrite_mode
-                
-                # Always update these if provided
-                record.rewrite_enabled = rewrite_enabled
-                if prompt is not None:
-                    record.prompt = prompt
                 
                 # Update metadata fields if present in metadata dict
                 if metadata:
@@ -149,10 +132,6 @@ def save_transcription_record(
                 record = TranscriptionRecord(
                     job_id=job_id,
                     raw_transcript=raw_text,
-                    clean_transcript=clean_text,
-                    rewrite_mode=rewrite_mode,
-                    rewrite_enabled=rewrite_enabled,
-                    prompt=prompt,
                     audio_duration_seconds=(metadata or {}).get("audio_duration_seconds"),
                     input_size_bytes=(metadata or {}).get("input_size_bytes"),
                     original_filename=(metadata or {}).get("original_filename"),
@@ -190,10 +169,6 @@ def list_transcription_records(limit: int = 50) -> list[dict[str, Any]]:
                 "id": record.id,
                 "job_id": record.job_id,
                 "raw_transcript": record.raw_transcript,
-                "clean_transcript": record.clean_transcript,
-                "rewrite_mode": record.rewrite_mode,
-                "rewrite_enabled": record.rewrite_enabled,
-                "prompt": record.prompt,
                 "audio_duration_seconds": record.audio_duration_seconds,
                 "input_size_bytes": record.input_size_bytes,
                 "original_filename": record.original_filename,
@@ -233,11 +208,7 @@ def get_transcription_record(job_id: str) -> Optional[Dict[str, Any]]:
                 "id": record.id,
                 "job_id": record.job_id,
                 "raw": record.raw_transcript,
-                "clean": record.clean_transcript,
                 "metadata": {
-                    "rewrite_mode": record.rewrite_mode,
-                    "rewrite_enabled": record.rewrite_enabled,
-                    "prompt": record.prompt,
                     "audio_duration_seconds": record.audio_duration_seconds,
                     "input_size_bytes": record.input_size_bytes,
                     "original_filename": record.original_filename,

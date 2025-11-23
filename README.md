@@ -2,14 +2,12 @@
 
 [![Build and Push Docker Images](https://github.com/jenanos/nb-transcribe/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/jenanos/nb-transcribe/actions/workflows/build-and-push.yml)
 
-End-to-end Norwegian speech-to-text with a FastAPI backend, Next.js 15 frontend, GPU-accelerated NB-Whisper transcription, and Gemma-3 assisted copy editing.
+End-to-end Norwegian speech-to-text with a FastAPI backend, Next.js 15 frontend, and GPU-accelerated NB-Whisper transcription.
 
 ## ✨ What’s inside
 
 - **FastAPI backend** that exposes both synchronous `/process/` and async `/jobs` endpoints.
 - **NB-Whisper Large** for GPU-accelerated automatic speech recognition.
-- **Gemma-3 4B IT** for summarising, rewriting, and workflow extraction.
-- **Stub mode** (`DEV_STUB=1`) to exercise the UI without a GPU, HF token, or FFmpeg.
 - **Docker Compose** definitions for a full-stack deployment with NVIDIA GPU support.
 
 ## 🧰 Prerequisites
@@ -19,7 +17,7 @@ End-to-end Norwegian speech-to-text with a FastAPI backend, Next.js 15 frontend,
 - Python 3.11+ with `venv`.
 - FFmpeg in your `PATH` (e.g. `sudo apt install ffmpeg`).
 - NVIDIA GPU with CUDA 12.x and drivers installed for the full pipeline.
-- Hugging Face account with access to Gemma-3 and a personal access token for `HF_TOKEN`.
+- Hugging Face account when the NB-Whisper checkpoint requires authentication.
 
 ## 🚀 Local development
 
@@ -42,7 +40,7 @@ export HF_TOKEN="<your-hf-token>"
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The backend expects a CUDA-capable GPU, FFmpeg, and a valid Hugging Face token to load the transcription and rewriting models.
+The backend expects a CUDA-capable GPU and FFmpeg to load the transcription model.
 
 ### 3. Start the frontend
 
@@ -56,30 +54,17 @@ npm run dev
 The Next.js app runs on `http://localhost:3000` and forwards API calls to `BACKEND_URL` (defaults to the backend started above).
 Toggle the mocked experience by setting `NEXT_PUBLIC_MOCK_MODE` to `1` in `.env.local`.
 
-## 🧪 Backend stub mode (no GPU required)
-
-Set `DEV_STUB=1` to skip heavy model loading and return deterministic demo responses:
-
-```bash
-cd backend
-source .venv/bin/activate  # reuse the virtual environment created above
-export DEV_STUB=1
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-With the stub enabled you can iterate on the frontend without FFmpeg, CUDA, or `HF_TOKEN`.
-
 ## 🧪 Frontend mock mode
 
 - Copy `frontend/.env.local.example` to `.env.local` and keep `NEXT_PUBLIC_MOCK_MODE=1` to build the demo UI without a backend.
-- The file picker is pre-filled with a demo clip; uploading new audio is disabled and shows a short English explainer.
-- Start the transcription straight away to see mocked raw and rewritten outputs for each mode.
+- The file picker is pre-filled with a demo clip; uploading new audio is disabled and shows a short explainer.
+- Start the transcription straight away to see mocked raw outputs without backend access.
 
 ## 🧷 Useful commands
 
 | Area     | Command                          | Notes |
 |----------|----------------------------------|-------|
-| Backend  | `pytest`                         | Runs API and pipeline tests (requires `DEV_STUB=1` for fast execution). |
+| Backend  | `pytest`                         | Runs API and pipeline tests (monkeypatching the heavy ASR pipeline). |
 | Backend  | `uvicorn main:app --reload`      | Starts the FastAPI server locally. |
 | Frontend | `npm run lint`                   | Next.js linting. |
 | Frontend | `npm test`                       | Jest + Testing Library suite. |
@@ -104,22 +89,18 @@ docker compose up --build
 - Set `DATABASE_URL` to a PostgreSQL connection string (SQLAlchemy 2.x syntax, e.g.
   `postgresql+psycopg://user:password@hostname:5432/nb_transcribe`).
 - When configured, the backend creates a `transcription_records` table that stores the raw output,
-  rewritten text, prompt, rewrite mode, duration, input size, model id, filenames, status, and a JSON
-  blob with additional metadata for every synchronous `/process/` call or async job.
-- Missing or invalid `DATABASE_URL` values simply disable persistence, keeping local DEV_STUB
-  workflows simple.
+  duration, input size, model id, filenames, status, and a JSON blob with additional metadata for
+  every synchronous `/process/` call or async job.
+- Missing or invalid `DATABASE_URL` values simply disable persistence.
 - Deployments running multiple backend instances can point them all to the same database service to
   consolidate job history.
 
 ## ⚙️ Configuration
 
 - `frontend/.env.local.example` – template for local/frontend deployments (mock mode flag and backend URL).
-- `backend/env.example` – template for backend deployments (stub toggle and Hugging Face token).
+- `backend/env.example` – template for backend deployments (Hugging Face token for NB-Whisper if required).
 - `DATABASE_URL` – optional PostgreSQL DSN consumed by SQLAlchemy to store transcription history.
-- `HF_TOKEN` – required by the backend for Gemma-3 powered rewriting when not in stub mode.
-- `GEMINI_API_KEY` / `GEMINI_MODEL` – required when using the Gemini CLI in headless mode for rewriting. The CLI requires Node
-  18+; an error message like `SyntaxError: Unexpected token '.'` usually means the Node version is too old.
-- `DEV_STUB` – enable to run the backend with fixture data and without GPU dependencies.
+- `HF_TOKEN` – required when the NB-Whisper checkpoint needs authentication.
 - `BACKEND_URL` / `NEXT_PUBLIC_BACKEND_URL` / `NEXT_PUBLIC_API_URL` – frontend overrides for
   the API base URL (default: `http://127.0.0.1:8000`). The server-side proxy prefers
   `BACKEND_URL` when present, but it will fall back to either public variable so existing
@@ -146,12 +127,12 @@ docker compose up --build
 
 ```
 .
-├── backend/        # FastAPI app with transcription and rewriting pipelines
+├── backend/        # FastAPI app with transcription pipeline
 ├── frontend/       # Next.js 15 (App Router) UI
 └── docker-compose.yml
 ```
 
 ## 🤝 Contributing
 
-- Keep an eye on GPU VRAM usage: NB-Whisper Large and Gemma-3 both run on the GPU.
+- Keep an eye on GPU VRAM usage: NB-Whisper Large runs on the GPU.
 - Open issues or pull requests with ideas, bug fixes, or documentation improvements—contributions are welcome!

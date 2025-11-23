@@ -24,7 +24,7 @@ const roadRage = localFont({
 
 export const metadata: Metadata = {
   title: "NB-transcribe",
-  description: "Transkriber og renskriv lydfiler med norsk tale i synthwave-stil",
+  description: "Transkriber lydfiler med norsk tale i synthwave-stil",
 };
 
 export default function RootLayout({
