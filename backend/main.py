@@ -218,7 +218,6 @@ async def process(
     job_id = str(uuid4())
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-    result = await loop.run_in_executor(
         executor, run_transcribe_pipeline, tmp_path, mode, rewrite, job_id, prompt, original_filename, model
     )
 
@@ -262,9 +261,7 @@ def _submit_job(
     }
     try:
         JOBS[job_id]["status"] = "running"
-        JOBS[job_id]["status"] = "running"
         result = run_transcribe_pipeline(file_path, mode, rewrite, job_id, prompt, original_filename, model)
-        JOBS[job_id]["status"] = "done"
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["result"] = result
         metadata_for_db = result.get("metadata", metadata_for_db)
