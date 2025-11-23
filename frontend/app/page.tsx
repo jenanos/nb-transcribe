@@ -185,24 +185,27 @@ export default function Home() {
         const pollBase = jobStatusBaseUrl || "/api/jobs";
         const res = await fetch(`${pollBase}/${activeJobId}`, { cache: "no-store", credentials: "include" });
 
+        const text = await res.text().catch(() => "");
         let data: any = null;
-        try {
-          data = await res.json();
-        } catch (parseError) {
-          // fall back to raw text when JSON parsing fails (e.g., 500 HTML error)
-          const text = await res.text().catch(() => "");
-          if (!res.ok) {
-            throw new Error(
-              `${res.status} ${res.statusText}` + (text ? ` – ${text}` : "")
-            );
+
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (parseError) {
+            if (res.ok) {
+              throw new Error("Kunne ikke tolke svar fra serveren.");
+            }
           }
-          throw parseError;
         }
 
         if (!res.ok) {
-          const details = [data?.error, data?.detail].filter(Boolean).join("\n");
+          const details = [data?.error, data?.detail, text].filter(Boolean).join("\n");
           const message = `${res.status} ${res.statusText}` + (details ? ` – ${details}` : "");
           throw new Error(message);
+        }
+
+        if (!data) {
+          throw new Error("Kunne ikke tolke svar fra serveren.");
         }
         if (cancelled) return;
 

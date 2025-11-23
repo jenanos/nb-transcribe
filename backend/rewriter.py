@@ -134,11 +134,15 @@ def rewrite_text_gemini(text: str, mode: str, prompt: str | None) -> str:
         # Gemini CLI 1.x krever Node >= 18 pga. ESM/optional chaining i bundlet kildekode.
         if "Unexpected token '.'" in stderr and "gemini.js" in stderr:
             node_version = _get_node_version()
-            version_hint = (
-                f"Oppgradér Node.js til v18 eller nyere (nåværende: v{node_version[0]}.{node_version[1]}.{node_version[2]})"
-                if node_version
-                else "Installer Node.js v18+ slik at Gemini CLI kan kjøres i headless-modus."
-            )
+            if node_version:
+                version_hint = (
+                    "Oppgradér Node.js til v18 eller nyere "
+                    f"(nåværende: v{node_version[0]}.{node_version[1]}.{node_version[2]})"
+                )
+            else:
+                version_hint = (
+                    "Installer Node.js v18+ slik at Gemini CLI kan kjøres i headless-modus."
+                )
             raise RuntimeError(
                 "Feil under kjøring av Gemini CLI: Node-versjonen er for gammel til å parse headless-klienten. "
                 f"{version_hint}"
