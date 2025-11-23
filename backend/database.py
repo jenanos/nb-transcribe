@@ -95,26 +95,75 @@ def save_transcription_record(
         logger.debug("Database session factory missing; skipping persistence for job %s", job_id)
         return
 
-    record = TranscriptionRecord(
-        job_id=job_id,
-        raw_transcript=raw_text,
-        clean_transcript=clean_text,
-        rewrite_mode=rewrite_mode,
-        rewrite_enabled=rewrite_enabled,
-        prompt=prompt,
-        audio_duration_seconds=(metadata or {}).get("audio_duration_seconds"),
-        input_size_bytes=(metadata or {}).get("input_size_bytes"),
-        original_filename=(metadata or {}).get("original_filename"),
-        model_id=(metadata or {}).get("model_id"),
-        metadata_json=metadata,
-        completed_at=datetime.now(timezone.utc),
-        status=status,
-        error_message=error_message,
-    )
-
     try:
         with _SESSION_FACTORY() as session:  # type: ignore[misc]
-            session.add(record)
+            # Check if record exists
+            record = (
+                session.query(TranscriptionRecord)
+                .filter(TranscriptionRecord.job_id == job_id)
+                .first()
+            )
+
+            if record:
+                # Update existing record
+                if raw_text is not None:
+                    record.raw_transcript = raw_text
+                if clean_text is not None:
+                    record.clean_transcript = clean_text
+                if rewrite_mode is not None:
+                    record.rewrite_mode = rewrite_mode
+                
+                # Always update these if provided
+                record.rewrite_enabled = rewrite_enabled
+                if prompt is not None:
+                    record.prompt = prompt
+                
+                # Update metadata fields if present in metadata dict
+                if metadata:
+                    if "audio_duration_seconds" in metadata:
+                        record.audio_duration_seconds = metadata["audio_duration_seconds"]
+                    if "input_size_bytes" in metadata:
+                        record.input_size_bytes = metadata["input_size_bytes"]
+                    if "original_filename" in metadata:
+                        record.original_filename = metadata["original_filename"]
+                    if "model_id" in metadata:
+                        record.model_id = metadata["model_id"]
+                    
+                    # Merge or replace metadata_json? Let's replace for simplicity, 
+                    # or merge if we want to be fancy. Replacing is safer for now 
+                    # to ensure we don't have stale keys, but we should be careful.
+                    # Given the usage, we usually pass the full metadata object.
+                    record.metadata_json = metadata
+
+                record.status = status
+                if error_message is not None:
+                    record.error_message = error_message
+                
+                # If status is done or error, set completed_at if not set?
+                # Or just update completed_at every time we save with a terminal status?
+                if status in ("done", "error"):
+                    record.completed_at = datetime.now(timezone.utc)
+
+            else:
+                # Create new record
+                record = TranscriptionRecord(
+                    job_id=job_id,
+                    raw_transcript=raw_text,
+                    clean_transcript=clean_text,
+                    rewrite_mode=rewrite_mode,
+                    rewrite_enabled=rewrite_enabled,
+                    prompt=prompt,
+                    audio_duration_seconds=(metadata or {}).get("audio_duration_seconds"),
+                    input_size_bytes=(metadata or {}).get("input_size_bytes"),
+                    original_filename=(metadata or {}).get("original_filename"),
+                    model_id=(metadata or {}).get("model_id"),
+                    metadata_json=metadata,
+                    completed_at=datetime.now(timezone.utc) if status in ("done", "error") else None,
+                    status=status,
+                    error_message=error_message,
+                )
+                session.add(record)
+            
             session.commit()
     except SQLAlchemyError as exc:
         logger.error("Failed to persist transcription %s: %s", job_id, exc)

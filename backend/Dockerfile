@@ -3,8 +3,11 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 # Installer systempakker
 RUN apt-get update && \
-    apt-get install -y ffmpeg git python3 python3-pip && \
+    apt-get install -y ffmpeg git python3 python3-pip nodejs npm && \
     apt-get clean
+
+# Installer Gemini CLI
+RUN npm install -g @google/gemini-cli
 
 # Sett arbeidsmappe
 WORKDIR /app
