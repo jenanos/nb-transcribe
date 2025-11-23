@@ -193,7 +193,7 @@ export default function Home() {
       {showMockInfo && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4">
           <div className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]">
-            <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock mode enabled</h3>
+            <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock-modus aktivert</h3>
             <p className="mb-3 text-sm text-gray-200">
               Denne forhåndsvisningen kjører kun den synlige frontenden og simulerer svar fra backenden.
               I produksjon er backenden selvhostet med NB-Whisper Large på GPU, men den holdes privat slik
@@ -216,7 +216,7 @@ export default function Home() {
       {showMockUploadNotice && (
         <div className="fixed inset-0 z-30 flex items-start justify-center pointer-events-none">
           <div className="mt-24 w-full max-w-md rounded-xl border border-cyan-400 bg-black/90 p-5 text-sm text-gray-100 shadow-[0_0_15px_#00e5ff] pointer-events-auto">
-            <h4 className="font-orbitron text-lg text-cyan-300 mb-2">File picker disabled in mock mode</h4>
+            <h4 className="font-orbitron text-lg text-cyan-300 mb-2">Filopplasting deaktivert i mock-modus</h4>
             <p className="mb-3 text-gray-200">
               Opplasting av egne filer er skrudd av her. Vi har forhåndslastet et eksempelklipp slik at du kan se
               transkriberingsflyten uten backend-tilgang.

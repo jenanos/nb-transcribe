@@ -58,7 +58,7 @@ Toggle the mocked experience by setting `NEXT_PUBLIC_MOCK_MODE` to `1` in `.env.
 
 - Copy `frontend/.env.local.example` to `.env.local` and keep `NEXT_PUBLIC_MOCK_MODE=1` to build the demo UI without a backend.
 - The file picker is pre-filled with a demo clip; uploading new audio is disabled and shows a short explainer.
-- Start the transcription straight away to see mocked rå-outputs uten tilgang til backenden.
+- Start the transcription straight away to see mocked raw outputs without backend access.
 
 ## 🧷 Useful commands
 
