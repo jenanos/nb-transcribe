@@ -90,8 +90,10 @@ def rewrite_text_gemini(text: str, mode: str, prompt: str | None) -> str:
     # Kopier miljøvariabler og sett API-nøkkelen
     env = os.environ.copy()
     env["GEMINI_API_KEY"] = api_key
+    env.setdefault("GEMINI_HEADLESS", "1")  # tving non-interaktiv modus
+    env.setdefault("NO_COLOR", "1")         # unngå ANSI-koder i output
 
-    cmd = ['gemini', '--model', model_id]
+    cmd = ['gemini', '--model', model_id, '--output-format', 'text']
 
     try:
         # Vi sender prompten via stdin for å unngå argument-lengdebegrensninger.
@@ -104,7 +106,10 @@ def rewrite_text_gemini(text: str, mode: str, prompt: str | None) -> str:
             encoding='utf-8',
             env=env
         )
-        return result.stdout.strip()
+        # CLI kan likevel sende ANSI-koder dersom den tror den skriver til TTY.
+        # Rens resultatet slik at frontend ikke trenger å gjøre det selv.
+        clean_output = re.sub(r"\x1B\[[0-9;]*[mK]", "", result.stdout)
+        return clean_output.strip()
     except FileNotFoundError:
         raise RuntimeError("'gemini'-kommandoen ble ikke funnet. Sørg for at Gemini CLI er installert og i din PATH.")
     except subprocess.CalledProcessError as e:
