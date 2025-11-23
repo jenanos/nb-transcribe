@@ -93,6 +93,7 @@ def run_transcribe_pipeline(
     input_path: str,
     mode: str,
     rewrite: bool,
+    job_id: str,
     prompt: Optional[str] = None,
     original_filename: Optional[str] = None,
     model: str = "gemini",
@@ -171,6 +172,18 @@ def run_transcribe_pipeline(
         asr = get_asr_pipeline()
         raw_transcript = transcribe_segments(asr, segments)
 
+        # SAVE INTERMEDIATE RESULT
+        save_transcription_record(
+            job_id=job_id,
+            raw_text=raw_transcript,
+            clean_text=None,
+            rewrite_mode=mode,
+            rewrite_enabled=rewrite,
+            prompt=prompt,
+            metadata=metadata,
+            status="processing_rewrite" if rewrite else "done",
+        )
+
         clean_transcript = None
         if rewrite:
             clean_transcript = rewrite_text(raw_transcript, mode, prompt, model)
@@ -205,7 +218,7 @@ async def process(
     job_id = str(uuid4())
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, prompt, original_filename, model
+        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, job_id, prompt, original_filename, model
     )
 
     metadata = result.get("metadata") or {}
@@ -248,7 +261,7 @@ def _submit_job(
     }
     try:
         JOBS[job_id]["status"] = "running"
-        result = run_transcribe_pipeline(file_path, mode, rewrite, prompt, original_filename, model)
+        result = run_transcribe_pipeline(file_path, mode, rewrite, job_id, prompt, original_filename, model)
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["result"] = result
         metadata_for_db = result.get("metadata", metadata_for_db)
