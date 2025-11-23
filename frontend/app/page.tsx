@@ -184,7 +184,29 @@ export default function Home() {
       try {
         const pollBase = jobStatusBaseUrl || "/api/jobs";
         const res = await fetch(`${pollBase}/${activeJobId}`, { cache: "no-store", credentials: "include" });
-        const data = await res.json();
+
+        const text = await res.text().catch(() => "");
+        let data: any = null;
+
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (parseError) {
+            if (res.ok) {
+              throw new Error("Kunne ikke tolke svar fra serveren.");
+            }
+          }
+        }
+
+        if (!res.ok) {
+          const details = [data?.error, data?.detail, text].filter(Boolean).join("\n");
+          const message = `${res.status} ${res.statusText}` + (details ? ` – ${details}` : "");
+          throw new Error(message);
+        }
+
+        if (!data) {
+          throw new Error("Kunne ikke tolke svar fra serveren.");
+        }
         if (cancelled) return;
 
         if (data.status === "done") {

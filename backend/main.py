@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import logging
 import shutil
+import traceback
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
@@ -61,6 +62,12 @@ def normalize_prompt(value: Optional[str]) -> Optional[str]:
         cleaned = value.strip()
         return cleaned or None
     return None
+
+
+def normalize_model(model_value: Any) -> str:
+    """Return a usable model string even when called directly (outside FastAPI parsing)."""
+
+    return model_value if isinstance(model_value, str) else "gemini"
 
 
 async def persist_upload(upload: UploadFile) -> str:
@@ -209,8 +216,9 @@ async def process(
     prompt: Optional[str] = Form(None),
     model: str = Form("gemini"),
 ):
-    if model not in ("gemini", "gemma"):
-        return JSONResponse({"error": f"Invalid model: {model}. Must be 'gemini' or 'gemma'"}, status_code=400)
+    model_value = normalize_model(model)
+    if model_value not in ("gemini", "gemma"):
+        return JSONResponse({"error": f"Invalid model: {model_value}. Must be 'gemini' or 'gemma'"}, status_code=400)
 
     original_filename = file.filename
     tmp_path = await persist_upload(file)
@@ -218,7 +226,7 @@ async def process(
     job_id = str(uuid4())
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, job_id, prompt, original_filename, model
+        executor, run_transcribe_pipeline, tmp_path, mode, rewrite, job_id, prompt, original_filename, model_value
     )
 
     metadata = result.get("metadata") or {}
@@ -276,8 +284,12 @@ def _submit_job(
             status="done",
         )
     except Exception as e:
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
         JOBS[job_id]["status"] = "error"
-        JOBS[job_id]["error"] = str(e)
+        JOBS[job_id]["error"] = error_message
+        JOBS[job_id]["error_detail"] = error_traceback
+        logger.exception("Job %s feilet", job_id)
         save_transcription_record(
             job_id=job_id,
             raw_text=None,
@@ -287,7 +299,7 @@ def _submit_job(
             prompt=prompt,
             metadata=metadata_for_db,
             status="error",
-            error_message=str(e),
+            error_message=error_message,
         )
     finally:
         cleanup_jobs()
@@ -300,8 +312,9 @@ async def create_job(
     prompt: Optional[str] = Form(None),
     model: str = Form("gemini"),
 ):
-    if model not in ("gemini", "gemma"):
-        return JSONResponse({"error": f"Invalid model: {model}. Must be 'gemini' or 'gemma'"}, status_code=400)
+    model_value = normalize_model(model)
+    if model_value not in ("gemini", "gemma"):
+        return JSONResponse({"error": f"Invalid model: {model_value}. Must be 'gemini' or 'gemma'"}, status_code=400)
 
     tmp_path = await persist_upload(file)
     original_filename = file.filename
@@ -319,7 +332,7 @@ async def create_job(
         job_id,
         original_filename,
         prompt,
-        model,
+        model_value,
     )
 
     cleanup_jobs()
@@ -335,7 +348,10 @@ async def get_job(job_id: str):
         if job["status"] == "done":
             return JSONResponse({"status": "done", "result": job["result"]})
         if job["status"] == "error":
-            return JSONResponse({"status": "error", "error": job["error"]}, status_code=500)
+            error_payload = {"status": "error", "error": job.get("error")}
+            if job.get("error_detail"):
+                error_payload["detail"] = job["error_detail"]
+            return JSONResponse(error_payload, status_code=500)
         return JSONResponse({"status": job["status"]})
 
     # 2. Fallback til database
