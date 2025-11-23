@@ -3,7 +3,9 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 # Installer systempakker
 RUN apt-get update && \
-    apt-get install -y ffmpeg git python3 python3-pip nodejs npm && \
+    apt-get install -y curl ffmpeg git python3 python3-pip && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean
 
 # Installer Gemini CLI

@@ -184,7 +184,26 @@ export default function Home() {
       try {
         const pollBase = jobStatusBaseUrl || "/api/jobs";
         const res = await fetch(`${pollBase}/${activeJobId}`, { cache: "no-store", credentials: "include" });
-        const data = await res.json();
+
+        let data: any = null;
+        try {
+          data = await res.json();
+        } catch (parseError) {
+          // fall back to raw text when JSON parsing fails (e.g., 500 HTML error)
+          const text = await res.text().catch(() => "");
+          if (!res.ok) {
+            throw new Error(
+              `${res.status} ${res.statusText}` + (text ? ` – ${text}` : "")
+            );
+          }
+          throw parseError;
+        }
+
+        if (!res.ok) {
+          const details = [data?.error, data?.detail].filter(Boolean).join("\n");
+          const message = `${res.status} ${res.statusText}` + (details ? ` – ${details}` : "");
+          throw new Error(message);
+        }
         if (cancelled) return;
 
         if (data.status === "done") {
