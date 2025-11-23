@@ -117,6 +117,8 @@ docker compose up --build
 - `backend/env.example` – template for backend deployments (stub toggle and Hugging Face token).
 - `DATABASE_URL` – optional PostgreSQL DSN consumed by SQLAlchemy to store transcription history.
 - `HF_TOKEN` – required by the backend for Gemma-3 powered rewriting when not in stub mode.
+- `GEMINI_API_KEY` / `GEMINI_MODEL` – required when du bruker Gemini CLI i headless-modus for omskriving. CLI-en krever Node
+  18+; en feilmelding ala `SyntaxError: Unexpected token '.'` betyr som regel at Node-versjonen er for gammel.
 - `DEV_STUB` – enable to run the backend with fixture data and without GPU dependencies.
 - `BACKEND_URL` / `NEXT_PUBLIC_BACKEND_URL` / `NEXT_PUBLIC_API_URL` – frontend overrides for
   the API base URL (default: `http://127.0.0.1:8000`). The server-side proxy prefers

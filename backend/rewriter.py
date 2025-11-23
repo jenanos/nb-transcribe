@@ -2,6 +2,7 @@ import subprocess
 import os
 import re
 from functools import lru_cache
+from typing import Optional, Tuple
 
 # Importer kun for Gemma-støtte
 try:
@@ -22,6 +23,20 @@ def get_system_prompt(mode: str) -> str:
         'workflow': "Du er en arbeidsflyt-assistent som analyserer en transkripsjon. Identifiser hvert konkrete handlingspunkt eller oppgave som nevnes. For hver oppgave: oppgi en kort beskrivelse og lag en presis prompt som kan gis til et annet LLM-verktøy for å utføre oppgaven. Inkluder relevante detaljer, mål, avhengigheter, personer og kontekst fra transkripsjonen. Svar på norsk og formater resultatet som en nummerert liste med blokker på formatet:\nOppgave X: <kort beskrivelse>\nPrompt:\n\"\"\"\n<prompttekst>\n\"\"\"\nIkke legg til vurderinger, konklusjoner eller tekst som ikke følger strukturen."
     }
     return prompts.get(mode, "Du er en hjelpsom assistent. Utfør omskriving uten å gi tilbakemeldinger eller ros.")
+
+
+def _get_node_version() -> Optional[Tuple[int, int, int]]:
+    """Returnerer installert Node.js-versjon som et (major, minor, patch)-tuple."""
+
+    try:
+        result = subprocess.run(
+            ["node", "-v"], capture_output=True, text=True, check=True, encoding="utf-8"
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+    match = re.search(r"v(\d+)\.(\d+)\.(\d+)", result.stdout.strip())
+    return tuple(map(int, match.groups())) if match else None
 
 @lru_cache(maxsize=1)
 def create_rewriter_pipeline(model_name: str = "google/gemma-3-4b-it"):
@@ -113,7 +128,24 @@ def rewrite_text_gemini(text: str, mode: str, prompt: str | None) -> str:
     except FileNotFoundError:
         raise RuntimeError("'gemini'-kommandoen ble ikke funnet. Sørg for at Gemini CLI er installert og i din PATH.")
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Feil under kjøring av Gemini CLI: {e.stderr}")
+        stderr = e.stderr or ""
+        stdout = e.stdout or ""
+
+        # Gemini CLI 1.x krever Node >= 18 pga. ESM/optional chaining i bundlet kildekode.
+        if "Unexpected token '.'" in stderr and "gemini.js" in stderr:
+            node_version = _get_node_version()
+            version_hint = (
+                f"Oppgradér Node.js til v18 eller nyere (nåværende: v{node_version[0]}.{node_version[1]}.{node_version[2]})"
+                if node_version
+                else "Installer Node.js v18+ slik at Gemini CLI kan kjøres i headless-modus."
+            )
+            raise RuntimeError(
+                "Feil under kjøring av Gemini CLI: Node-versjonen er for gammel til å parse headless-klienten. "
+                f"{version_hint}"
+            )
+
+        message = stderr.strip() or stdout.strip() or "Ukjent feil fra Gemini CLI"
+        raise RuntimeError(f"Feil under kjøring av Gemini CLI: {message}")
 
 def rewrite_text(text: str, mode: str, prompt: str | None, model: str = "gemini") -> str:
     """Velger omskrivingsmotor basert på 'model'-parameteren."""
