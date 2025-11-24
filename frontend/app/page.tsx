@@ -179,7 +179,16 @@ export default function Home() {
   }, [activeJobId, jobStatusBaseUrl]);
 
   const handleReset = () => {
-    setFile(null);
+    if (MOCK_MODE) {
+      try {
+        const mockMp3Header = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x76]);
+        setFile(new File([mockMp3Header], MOCK_SAMPLE_FILE_NAME, { type: "audio/mpeg" }));
+      } catch {
+        setFile(null);
+      }
+    } else {
+      setFile(null);
+    }
     setResult(null);
     setFlowState("idle");
     setError(null);
@@ -234,7 +243,7 @@ export default function Home() {
         </div>
       )}
 
-      <main className="flex-grow flex flex-col items-center p-6 space-y-6">
+      <main className="flex-grow flex flex-col items-center p-6 pt-24 space-y-6">
         {/* Flashy tittel */}
         <h1 className="font-road-rage text-6xl md:text-7xl bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-400 bg-clip-text text-transparent glow-pulse animate-gradient text-center mt-6">
           NB-transcribe
@@ -290,10 +299,7 @@ export default function Home() {
               />
             </div>
 
-            <p className="text-sm text-gray-300">
-              Fila sendes til NB-Whisper Large for transkribering. I denne demoen kjører modellen lokalt og holdes privat; Vercel
-              frontenden viser kun resultatet.
-            </p>
+
 
             {/* Submit */}
             <button

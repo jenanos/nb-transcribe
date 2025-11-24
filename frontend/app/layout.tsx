@@ -45,7 +45,7 @@ export default function RootLayout({
         className={`${orbitron.variable} ${roboto.variable} ${roadRage.variable} antialiased bg-black text-white`}
       >
         <Navbar />
-        <div className="pt-20">{children}</div>
+        <div>{children}</div>
       </body>
     </html>
   );
