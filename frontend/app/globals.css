@@ -1,8 +1,22 @@
 @import "tailwindcss";
 
+@layer utilities {
+  .animate-progress-indeterminate {
+    animation: progress-indeterminate 2s infinite linear;
+  }
+
+  @keyframes progress-indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
 /* Mildere glow */
 @keyframes glowPulse {
-
   0%,
   100% {
     text-shadow: 0 0 3px #ff33a8, 0 0 6px #ff33a8, 0 0 10px #ff33a8;

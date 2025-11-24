@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import CopyableEditableBox from "@/app/components/CopyableEditableBox";
+import ProcessingAnimation from "@/app/components/ProcessingAnimation";
 import bgImage from "@/public/nb-transcribe-background.png";
 
 const MOCK_MODE = (process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
@@ -19,10 +20,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ raw: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState<"upload" | "results">("upload");
+  const [flowState, setFlowState] = useState<"idle" | "processing" | "results">("idle");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatusBaseUrl, setJobStatusBaseUrl] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<"queued" | "running" | null>(null);
   const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
   const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,14 +64,15 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setFlowState("processing");
 
     if (MOCK_MODE) {
       setTimeout(() => {
         setResult({ raw: MOCK_TRANSCRIPT });
         setLoading(false);
-        setPage("results");
-        setJobStatus(null);
-      }, 600);
+        setFlowState("results");
+        setActiveJobId(null);
+      }, 3000); // Litt lenger tid for å vise animasjonen
       return;
     }
 
@@ -92,13 +93,12 @@ export default function Home() {
       }
       const { job_id } = await create.json();
       setActiveJobId(job_id);
-      setJobStatus("queued");
       setJobStatusBaseUrl(jobEndpointBase);
     } catch (err: any) {
       setError(err.message || "Ukjent feil");
       setLoading(false);
+      setFlowState("idle");
       setActiveJobId(null);
-      setJobStatus(null);
       setJobStatusBaseUrl(null);
     }
   }
@@ -148,9 +148,8 @@ export default function Home() {
           const raw = data?.result?.raw ?? "";
           setResult({ raw });
           setLoading(false);
-          setPage("results");
+          setFlowState("results");
           setActiveJobId(null);
-          setJobStatus(null);
           setJobStatusBaseUrl(null);
           return;
         }
@@ -159,16 +158,13 @@ export default function Home() {
           throw new Error(data.error || "Ukjent job-feil");
         }
 
-        if (data.status === "queued" || data.status === "running") {
-          setJobStatus(data.status);
-        }
-
+        // Fortsett å polle
         pollTimeoutRef.current = setTimeout(poll, 2000);
       } catch (err: any) {
         if (cancelled) return;
         setError(err?.message || "Ukjent feil");
         setLoading(false);
-        setJobStatus(null);
+        setFlowState("idle");
         setActiveJobId(null);
         setJobStatusBaseUrl(null);
       }
@@ -181,6 +177,13 @@ export default function Home() {
       clearPollTimeout();
     };
   }, [activeJobId, jobStatusBaseUrl]);
+
+  const handleReset = () => {
+    setFile(null);
+    setResult(null);
+    setFlowState("idle");
+    setError(null);
+  };
 
   return (
     <div className="min-h-screen flex flex-col text-white font-sans relative">
@@ -231,22 +234,22 @@ export default function Home() {
         </div>
       )}
 
-      {/* Opplastingsside */}
-      {page === "upload" && (
-        <main className="flex-grow flex flex-col items-center p-6 space-y-6">
-          {/* Flashy tittel */}
-          <h1 className="font-road-rage text-6xl md:text-7xl bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-400 bg-clip-text text-transparent glow-pulse animate-gradient text-center mt-6">
-            NB-transcribe
-          </h1>
-          {/* Undertittel */}
-          <h2 className="font-orbitron text-2xl text-cyan-300 drop-shadow-[0_0_5px_#00e5ff] mb-4">
+      <main className="flex-grow flex flex-col items-center p-6 space-y-6">
+        {/* Flashy tittel */}
+        <h1 className="font-road-rage text-6xl md:text-7xl bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-400 bg-clip-text text-transparent glow-pulse animate-gradient text-center mt-6">
+          NB-transcribe
+        </h1>
+
+        {/* Upload Section */}
+        <div className={`w-full max-w-md transition-all duration-500 ${flowState === "idle" ? "block" : "hidden"}`}>
+          <h2 className="font-orbitron text-2xl text-cyan-300 drop-shadow-[0_0_5px_#00e5ff] mb-4 text-center">
             Opplasting
           </h2>
 
-          {/* Skjema */}
           <form
             onSubmit={handleSubmit}
-            className="w-full max-w-md p-6 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 space-y-6"
+            className={`w-full p-6 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 space-y-6 transition-opacity duration-500 ${flowState === "processing" ? "opacity-50 pointer-events-none" : "opacity-100"
+              }`}
           >
             {/* Custom file upload */}
             <div>
@@ -283,7 +286,7 @@ export default function Home() {
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 className="hidden"
                 required={!MOCK_MODE}
-                disabled={MOCK_MODE}
+                disabled={MOCK_MODE || flowState === "processing"}
               />
             </div>
 
@@ -295,57 +298,43 @@ export default function Home() {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full py-3 rounded-lg bg-pink-500 text-white font-bold shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
-              disabled={loading}
+              className="w-full py-3 rounded-lg bg-pink-500 text-white font-bold shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || flowState === "processing"}
             >
-              {loading ? "Behandler..." : "Start transkribering"}
+              {flowState === "processing" ? "Behandler..." : "Start transkribering"}
             </button>
-            {loading && (
-              <div className="text-center text-sm text-cyan-300">
-                {jobStatus === "running"
-                  ? "Jobben kjører – transkriberer med NB-Whisper."
-                  : "Jobb lagt i kø – starter om et øyeblikk."}
-              </div>
-            )}
           </form>
-          {error && <div className="text-red-400">{error}</div>}
-        </main>
-      )}
 
-      {/* Resultatside */}
-      {page === "results" && (
-        <main className="flex-grow p-6 space-y-6">
-          {/* Undertittel */}
-          <h2 className="font-orbitron text-2xl text-cyan-300 drop-shadow-[0_0_5px_#00e5ff] text-center">
-            Resultater
-          </h2>
-          {result && (
-            <div className="w-full max-w-3xl mx-auto space-y-6">
-              <CopyableEditableBox title="Transkripsjon" content={result.raw} />
+          {error && <div className="text-red-400 mt-4 text-center">{error}</div>}
+        </div>
+
+        {/* Processing Animation */}
+        {flowState === "processing" && (
+          <div className="w-full max-w-md animate-fade-in">
+            <ProcessingAnimation />
+          </div>
+        )}
+
+        {/* Results Section */}
+        {flowState === "results" && result && (
+          <div className="w-full max-w-3xl mx-auto space-y-6 animate-fade-in">
+            <h2 className="font-orbitron text-2xl text-cyan-300 drop-shadow-[0_0_5px_#00e5ff] text-center">
+              Resultater
+            </h2>
+            <CopyableEditableBox title="Transkripsjon" content={result.raw} />
+
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={handleReset}
+                className="flex items-center space-x-2 rounded-lg border border-cyan-400/50 bg-cyan-500/10 px-6 py-3 text-cyan-100 hover:bg-cyan-500/20 transition"
+              >
+                <span className="material-icons">refresh</span>
+                <span>Ny transkribering</span>
+              </button>
             </div>
-          )}
-        </main>
-      )}
-
-      {/* Navigasjon nederst */}
-      <footer className="glassmorphism sticky bottom-0 w-full bg-black/70 backdrop-blur-md border-t border-white/10">
-        <nav className="flex justify-around items-center h-16">
-          <button
-            onClick={() => setPage("upload")}
-            className={`flex flex-col items-center ${page === "upload" ? "text-cyan-300" : "text-gray-400 hover:text-cyan-300"}`}
-          >
-            <span className="material-icons text-3xl">upload_file</span>
-            <span className="text-xs">Opplasting</span>
-          </button>
-          <button
-            onClick={() => setPage("results")}
-            className={`flex flex-col items-center ${page === "results" ? "text-cyan-300" : "text-gray-400 hover:text-cyan-300"}`}
-          >
-            <span className="material-icons text-3xl">article</span>
-            <span className="text-xs">Resultater</span>
-          </button>
-        </nav>
-      </footer>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
