@@ -192,6 +192,7 @@ export default function Home() {
     setResult(null);
     setFlowState("idle");
     setError(null);
+    setLoading(false);
   };
 
   return (
