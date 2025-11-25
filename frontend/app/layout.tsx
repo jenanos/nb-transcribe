@@ -25,6 +25,9 @@ const roadRage = localFont({
 export const metadata: Metadata = {
   title: "NB-transcribe",
   description: "Transkriber lydfiler med norsk tale i synthwave-stil",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({
@@ -42,7 +45,7 @@ export default function RootLayout({
         className={`${orbitron.variable} ${roboto.variable} ${roadRage.variable} antialiased bg-black text-white`}
       >
         <Navbar />
-        <div className="pt-20">{children}</div>
+        <div>{children}</div>
       </body>
     </html>
   );

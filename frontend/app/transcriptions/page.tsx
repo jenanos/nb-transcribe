@@ -94,25 +94,18 @@ export default function TranscriptionsPage() {
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       </div>
 
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-12 pt-10 md:pt-16">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-12 pt-24">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="font-orbitron text-sm uppercase tracking-widest text-pink-300">Historikk</p>
+
             <h1 className="text-3xl font-bold text-cyan-200 drop-shadow-[0_0_10px_#00e5ff] md:text-4xl">
               Lagrede transkripsjoner
             </h1>
             <p className="max-w-2xl text-sm text-gray-200 md:text-base">
-              Her finner du alle transkripsjoner som er lagret i databasen. Klikk deg tilbake til forsiden for å laste opp nye
-              filer eller start en ny jobb.
+              Her finner du alle transkripsjoner som er lagret i databasen.
             </p>
           </div>
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-300/40 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-100 shadow-[0_0_10px_#00e5ff] hover:bg-cyan-500/20"
-          >
-            <span className="material-icons text-base">arrow_back</span>
-            Til transkribering
-          </Link>
+
         </div>
 
         {loading && (
@@ -143,13 +136,12 @@ export default function TranscriptionsPage() {
                   <p className="font-mono text-sm text-cyan-200">{record.job_id}</p>
                 </div>
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    record.status === "done"
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${record.status === "done"
                       ? "bg-green-500/20 text-green-200"
                       : record.status === "error"
                         ? "bg-red-500/20 text-red-200"
                         : "bg-yellow-500/20 text-yellow-100"
-                  }`}
+                    }`}
                 >
                   {record.status === "done" ? "Ferdig" : record.status === "error" ? "Feil" : record.status}
                 </span>
