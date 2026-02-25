@@ -10,6 +10,9 @@ const RAW_DIRECT_UPLOAD_BASE = process.env.NEXT_PUBLIC_DIRECT_BACKEND_URL ?? "";
 const DIRECT_UPLOAD_BASE = RAW_DIRECT_UPLOAD_BASE.trim().replace(/\/$/, "");
 const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 
+const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024; // 5 MB
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =
   "Dette er et eksempel på en transkripsjon fra NB-transcribe i mock-modus. Den faktiske backenden kjører lokalt " +
@@ -57,6 +60,44 @@ export default function Home() {
     });
   }, []);
 
+  async function uploadChunked(file: File, baseUrl: string): Promise<{ job_id: string }> {
+    const initUrl = `${baseUrl}/chunked/init?filename=${encodeURIComponent(file.name)}`;
+    const initRes = await fetch(initUrl, { method: "POST", credentials: "include" });
+    if (!initRes.ok) {
+      const t = await initRes.text();
+      throw new Error(`${initRes.status} ${initRes.statusText} – ${t}`);
+    }
+    const { upload_id } = await initRes.json();
+
+    let offset = 0;
+    while (offset < file.size) {
+      const end = Math.min(offset + CHUNK_SIZE, file.size);
+      const chunk = file.slice(offset, end);
+      const chunkForm = new FormData();
+      chunkForm.append("file", chunk, file.name);
+
+      const appendRes = await fetch(
+        `${baseUrl}/chunked/${upload_id}/append`,
+        { method: "POST", body: chunkForm, credentials: "include" }
+      );
+      if (!appendRes.ok) {
+        const t = await appendRes.text();
+        throw new Error(`${appendRes.status} ${appendRes.statusText} – ${t}`);
+      }
+      offset = end;
+    }
+
+    const finalRes = await fetch(
+      `${baseUrl}/chunked/${upload_id}/finalize`,
+      { method: "POST", credentials: "include" }
+    );
+    if (!(finalRes.status === 202 || finalRes.status === 200)) {
+      const t = await finalRes.text();
+      throw new Error(`${finalRes.status} ${finalRes.statusText} – ${t}`);
+    }
+    return await finalRes.json();
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
@@ -76,22 +117,31 @@ export default function Home() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     const jobEndpointBase = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/jobs` : "/api/jobs";
+    const useChunked = !HAS_DIRECT_UPLOAD && file.size > CHUNKED_UPLOAD_THRESHOLD;
 
     try {
-      const create = await fetch(jobEndpointBase, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!(create.status === 202 || create.status === 200)) {
-        const t = await create.text();
-        throw new Error(`${create.status} ${create.statusText} – ${t}`);
+      let job_id: string;
+
+      if (useChunked) {
+        const result = await uploadChunked(file, jobEndpointBase);
+        job_id = result.job_id;
+      } else {
+        const formData = new FormData();
+        formData.append("file", file);
+        const create = await fetch(jobEndpointBase, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!(create.status === 202 || create.status === 200)) {
+          const t = await create.text();
+          throw new Error(`${create.status} ${create.statusText} – ${t}`);
+        }
+        const data = await create.json();
+        job_id = data.job_id;
       }
-      const { job_id } = await create.json();
+
       setActiveJobId(job_id);
       setJobStatusBaseUrl(jobEndpointBase);
     } catch (err: any) {
