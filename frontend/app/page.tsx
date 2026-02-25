@@ -12,6 +12,7 @@ const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 
 const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024; // 5 MB
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+const POLL_MAX_RETRIES = 5;
 
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =
@@ -118,7 +119,7 @@ export default function Home() {
     }
 
     const jobEndpointBase = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/jobs` : "/api/jobs";
-    const useChunked = !HAS_DIRECT_UPLOAD && file.size > CHUNKED_UPLOAD_THRESHOLD;
+    const useChunked = file.size > CHUNKED_UPLOAD_THRESHOLD;
 
     try {
       let job_id: string;
@@ -163,6 +164,7 @@ export default function Home() {
     }
 
     let cancelled = false;
+    let consecutiveErrors = 0;
 
     const poll = async () => {
       clearPollTimeout();
@@ -184,10 +186,20 @@ export default function Home() {
         }
 
         if (!res.ok) {
+          const isTransient = res.status === 502 || res.status === 503 || res.status === 504;
+          if (isTransient && consecutiveErrors < POLL_MAX_RETRIES) {
+            consecutiveErrors++;
+            if (!cancelled) {
+              pollTimeoutRef.current = setTimeout(poll, 2000 * consecutiveErrors);
+            }
+            return;
+          }
           const details = [data?.error, data?.detail, text].filter(Boolean).join("\n");
           const message = `${res.status} ${res.statusText}` + (details ? ` – ${details}` : "");
           throw new Error(message);
         }
+
+        consecutiveErrors = 0;
 
         if (!data) {
           throw new Error("Kunne ikke tolke svar fra serveren.");
@@ -212,6 +224,12 @@ export default function Home() {
         pollTimeoutRef.current = setTimeout(poll, 2000);
       } catch (err: any) {
         if (cancelled) return;
+        const isNetworkError = err instanceof TypeError;
+        if (isNetworkError && consecutiveErrors < POLL_MAX_RETRIES) {
+          consecutiveErrors++;
+          pollTimeoutRef.current = setTimeout(poll, 2000 * consecutiveErrors);
+          return;
+        }
         setError(err?.message || "Ukjent feil");
         setLoading(false);
         setFlowState("idle");
