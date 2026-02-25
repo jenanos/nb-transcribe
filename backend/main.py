@@ -53,6 +53,7 @@ async def setup_database_on_startup():
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 JOB_TTL_SECONDS = 60 * 5  # behold ferdige jobber i minnet i 5 minutter (fallback til DB)
+CHUNKED_UPLOAD_TTL = 60 * 30  # opplastinger utløper etter 30 minutter
 
 
 async def persist_upload(upload: UploadFile) -> str:
@@ -169,6 +170,7 @@ async def process(
 # --------------------------- 
 executor = ThreadPoolExecutor(max_workers=1)  # kjør én jobb om gangen (GPU) 
 JOBS: Dict[str, Dict[str, Any]] = {}         # {job_id: {status, result, error}}
+CHUNKED_UPLOADS: Dict[str, Dict[str, Any]] = {}  # {upload_id: {path, filename, created_at}}
 
 def _submit_job(
     file_path: str,
@@ -262,6 +264,79 @@ async def get_job(job_id: str):
                 return JSONResponse({"status": record["status"]})
 
     return JSONResponse({"error": "Not found"}, status_code=404)
+
+
+# ---------------------------
+# 5) Chunked upload – unngår 502 ved store filer gjennom proxy
+# ---------------------------
+def _cleanup_chunked_uploads(now: Optional[float] = None) -> None:
+    timestamp = now or time.time()
+    expired = [
+        uid
+        for uid, info in list(CHUNKED_UPLOADS.items())
+        if timestamp - info.get("created_at", timestamp) > CHUNKED_UPLOAD_TTL
+    ]
+    for uid in expired:
+        info = CHUNKED_UPLOADS.pop(uid, None)
+        if info:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(info["path"])
+
+
+@app.post("/jobs/chunked/init")
+async def chunked_init(filename: Optional[str] = None):
+    _cleanup_chunked_uploads()
+    upload_id = str(uuid4())
+    fd, tmp_path = tempfile.mkstemp(suffix=".upload")
+    os.close(fd)
+    CHUNKED_UPLOADS[upload_id] = {
+        "path": tmp_path,
+        "filename": filename,
+        "created_at": time.time(),
+    }
+    return JSONResponse({"upload_id": upload_id})
+
+
+@app.post("/jobs/chunked/{upload_id}/append")
+async def chunked_append(upload_id: str, file: UploadFile = File(...)):
+    info = CHUNKED_UPLOADS.get(upload_id)
+    if not info:
+        return JSONResponse({"error": "Upload not found"}, status_code=404)
+    with open(info["path"], "ab") as f:
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            f.write(chunk)
+    await file.close()
+    if file.filename:
+        info["filename"] = file.filename
+    return JSONResponse({"status": "ok"})
+
+
+@app.post("/jobs/chunked/{upload_id}/finalize")
+async def chunked_finalize(upload_id: str):
+    info = CHUNKED_UPLOADS.pop(upload_id, None)
+    if not info:
+        return JSONResponse({"error": "Upload not found"}, status_code=404)
+
+    tmp_path = info["path"]
+    original_filename = info.get("filename")
+
+    job_id = str(uuid4())
+    JOBS[job_id] = {"status": "queued", "result": None, "error": None, "created_at": time.time()}
+
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(
+        executor,
+        _submit_job,
+        tmp_path,
+        job_id,
+        original_filename,
+    )
+
+    cleanup_jobs()
+    return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)
 
 
 @app.get("/transcriptions")
