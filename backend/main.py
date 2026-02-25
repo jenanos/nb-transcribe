@@ -6,7 +6,9 @@ import logging
 import shutil
 import traceback
 import time
+from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from uuid import uuid4
 from typing import Dict, Any, Optional
@@ -25,10 +27,26 @@ from database import (
 
 logger = logging.getLogger(__name__)
 
-# --------------------------- 
-# 1) Opprett app TIDLIG
-# --------------------------- 
-app = FastAPI()
+
+@lru_cache(maxsize=1)
+def get_asr_pipeline():
+    from transcribe import create_asr_pipeline  # Importer lokalt for å utsette kostnaden
+
+    return create_asr_pipeline()
+
+
+# ---------------------------
+# 1) Lifespan (erstatter deprecated on_event)
+# ---------------------------
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    setup_database()
+    yield
+    get_asr_pipeline.cache_clear()
+    executor.shutdown(wait=False)
+
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS er ikke nødvendig når du proxier via Next.js, men det skader ikke å la stå
 app.add_middleware(
@@ -38,17 +56,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@lru_cache(maxsize=1)
-def get_asr_pipeline():
-    from transcribe import create_asr_pipeline  # Importer lokalt for å utsette kostnaden
-
-    return create_asr_pipeline()
-
-@app.on_event("startup")
-async def setup_database_on_startup():
-    setup_database()
 
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
@@ -349,7 +356,3 @@ async def get_transcriptions(limit: int = 50):
     return JSONResponse({"items": records})
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    get_asr_pipeline.cache_clear()
-    executor.shutdown(wait=False)
