@@ -40,7 +40,7 @@ def to_wav(input_path: str, sampling_rate: int = 16000) -> str:
         os.environ["FFMPEG_BINARY"],
         "-y", "-i", input_path,
         "-ar", str(sampling_rate), "-ac", "1", wav_path
-    ], check=True)
+    ], check=True, capture_output=True)
     return wav_path
 
 

@@ -1,14 +1,39 @@
 import importlib
 import io
 import json
+import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
 from starlette.datastructures import UploadFile
 
 
+def _ensure_transcribe_importable():
+    """Stub out heavy GPU dependencies so ``import transcribe`` works in CI."""
+    for mod_name in ("torch", "soundfile", "transformers"):
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = types.ModuleType(mod_name)
+    torch_stub = sys.modules["torch"]
+    if not hasattr(torch_stub, "cuda"):
+        cuda = types.ModuleType("torch.cuda")
+        cuda.is_available = lambda: False  # type: ignore[attr-defined]
+        torch_stub.cuda = cuda  # type: ignore[attr-defined]
+    if not hasattr(torch_stub, "float16"):
+        torch_stub.float16 = "float16"  # type: ignore[attr-defined]
+    sf_stub = sys.modules["soundfile"]
+    if not hasattr(sf_stub, "read"):
+        sf_stub.read = lambda *a, **kw: ([], 16000)  # type: ignore[attr-defined]
+        sf_stub.write = lambda *a, **kw: None  # type: ignore[attr-defined]
+        sf_stub.info = lambda *a, **kw: types.SimpleNamespace(duration=0.0, frames=0, samplerate=16000)  # type: ignore[attr-defined]
+    tf_stub = sys.modules["transformers"]
+    if not hasattr(tf_stub, "pipeline"):
+        tf_stub.pipeline = lambda *a, **kw: None  # type: ignore[attr-defined]
+
+
 def _patch_transcribe(monkeypatch, tmp_path: Path):
+    _ensure_transcribe_importable()
     import transcribe
 
     seg_dir = tmp_path / "segments"
