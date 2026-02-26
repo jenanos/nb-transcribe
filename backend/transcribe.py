@@ -58,10 +58,19 @@ def segment_wav(wav_path: str, segment_length_s: int = 30) -> tuple[list[str], s
     return paths, tmpdir
 
 
-def transcribe_segments(asr_pipeline, segments: list[str]) -> str:
-    """Transkriberer en liste med segmentfiler og returnerer samlet tekst."""
-    results = asr_pipeline(
-        segments,
-        generate_kwargs={"task": "transcribe", "language": "no", "num_beams": 5}
-    )
-    return "\n".join([res["text"] for res in results])
+def transcribe_segments(asr_pipeline, segments: list[str], sub_batch_size: int = 10) -> str:
+    """Transkriberer en liste med segmentfiler og returnerer samlet tekst.
+
+    For lange lydfiler kan antall segmenter bli svært høyt (f.eks. 48 for 24 min).
+    Vi deler derfor opp i sub-batcher for å begrense minnebruk og unngå at GPU-
+    prosessen blokkerer i for lang tid sammenhengende.
+    """
+    all_texts: list[str] = []
+    for i in range(0, len(segments), sub_batch_size):
+        batch = segments[i : i + sub_batch_size]
+        results = asr_pipeline(
+            batch,
+            generate_kwargs={"task": "transcribe", "language": "no", "num_beams": 5},
+        )
+        all_texts.extend(res["text"] for res in results)
+    return "\n".join(all_texts)

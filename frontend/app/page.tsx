@@ -10,9 +10,9 @@ const RAW_DIRECT_UPLOAD_BASE = process.env.NEXT_PUBLIC_DIRECT_BACKEND_URL ?? "";
 const DIRECT_UPLOAD_BASE = RAW_DIRECT_UPLOAD_BASE.trim().replace(/\/$/, "");
 const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 
-const CHUNKED_UPLOAD_THRESHOLD = 5 * 1024 * 1024; // 5 MB
+const CHUNKED_UPLOAD_THRESHOLD = 1 * 1024 * 1024; // 1 MB – bruk chunked upload tidlig for å unngå 502 via proxy
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
-const POLL_MAX_RETRIES = 5;
+const POLL_MAX_RETRIES = 20;
 
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =

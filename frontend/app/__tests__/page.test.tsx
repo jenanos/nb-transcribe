@@ -124,6 +124,104 @@ describe("Home page", () => {
     }
   });
 
+  test("uses chunked upload for files above 1 MB", async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const originalFormData = globalThis.FormData;
+    class MockFormData {
+      private readonly store = new Map<string, unknown>();
+      append(key: string, value: unknown) {
+        this.store.set(key, value);
+      }
+    }
+    (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
+    const originalFetch = globalThis.fetch;
+    const originalWindowFetch = typeof window !== "undefined" ? window.fetch : undefined;
+    const fetchMock = jest.fn();
+    Object.defineProperty(globalThis, "fetch", {
+      value: fetchMock,
+      configurable: true,
+      writable: true,
+    });
+    if (typeof window !== "undefined") {
+      Object.defineProperty(window, "fetch", {
+        value: fetchMock,
+        configurable: true,
+        writable: true,
+      });
+    }
+    // Chunked flow: init → append → finalize → poll done
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ upload_id: "upl-1" }))        // init
+      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // append
+      .mockResolvedValueOnce(jsonResponse({ job_id: "job-chunked", status: "queued" }, 202)) // finalize
+      .mockResolvedValueOnce(
+        jsonResponse({ status: "done", result: { raw: "Chunked result" } })
+      );
+
+    try {
+      render(<Home />);
+
+      const fileInput = screen.getByLabelText("Last opp lydfil");
+      // Create a file > 1 MB to trigger chunked upload
+      const largeContent = new Uint8Array(2 * 1024 * 1024);
+      const testFile = new File([largeContent], "long-recording.mp3", { type: "audio/mpeg" });
+      await user.upload(fileInput, testFile);
+
+      const submitButton = screen.getByRole("button", { name: "Start transkribering" });
+      const form = submitButton.closest("form");
+      expect(form).not.toBeNull();
+      if (form) {
+        (form as HTMLFormElement).noValidate = true;
+        await act(async () => {
+          const event = new Event("submit", { bubbles: true, cancelable: true });
+          form.dispatchEvent(event);
+        });
+      }
+
+      // The first call should be the chunked init endpoint
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.stringContaining("/api/jobs/chunked/init"),
+          expect.objectContaining({ method: "POST" })
+        )
+      );
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+
+      expect(await screen.findByText("Chunked result")).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+      if (originalFetch) {
+        Object.defineProperty(globalThis, "fetch", {
+          value: originalFetch,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis as Record<string, unknown>, "fetch");
+      }
+      if (typeof window !== "undefined") {
+        if (originalWindowFetch) {
+          Object.defineProperty(window, "fetch", {
+            value: originalWindowFetch,
+            configurable: true,
+            writable: true,
+          });
+        } else {
+          Reflect.deleteProperty(window as unknown as Record<string, unknown>, "fetch");
+        }
+      }
+      if (originalFormData) {
+        (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
+      } else {
+        Reflect.deleteProperty(globalThis as Record<string, unknown>, "FormData");
+      }
+    }
+  });
+
   test("polling retries on transient 502 errors", async () => {
     jest.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
