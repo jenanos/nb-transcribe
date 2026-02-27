@@ -299,12 +299,120 @@ describe("Home page", () => {
         jest.advanceTimersByTime(4000);
       });
 
-      // Third poll → success
+      // Third poll → success (backoff after 2nd 502 = 2000 * 2 = 4000ms)
       await act(async () => {
-        jest.advanceTimersByTime(6000);
+        jest.advanceTimersByTime(4000);
       });
 
       expect(await screen.findByText("Retried transcript")).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+      if (originalFetch) {
+        Object.defineProperty(globalThis, "fetch", {
+          value: originalFetch,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis as Record<string, unknown>, "fetch");
+      }
+      if (typeof window !== "undefined") {
+        if (originalWindowFetch) {
+          Object.defineProperty(window, "fetch", {
+            value: originalWindowFetch,
+            configurable: true,
+            writable: true,
+          });
+        } else {
+          Reflect.deleteProperty(window as unknown as Record<string, unknown>, "fetch");
+        }
+      }
+      if (originalFormData) {
+        (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
+      } else {
+        Reflect.deleteProperty(globalThis as Record<string, unknown>, "FormData");
+      }
+    }
+  });
+
+  test("polling retries on network TypeError errors", async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const originalFormData = globalThis.FormData;
+    class MockFormData {
+      private readonly store = new Map<string, unknown>();
+      append(key: string, value: unknown) {
+        this.store.set(key, value);
+      }
+    }
+    (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
+    const originalFetch = globalThis.fetch;
+    const originalWindowFetch = typeof window !== "undefined" ? window.fetch : undefined;
+    const fetchMock = jest.fn();
+    Object.defineProperty(globalThis, "fetch", {
+      value: fetchMock,
+      configurable: true,
+      writable: true,
+    });
+    if (typeof window !== "undefined") {
+      Object.defineProperty(window, "fetch", {
+        value: fetchMock,
+        configurable: true,
+        writable: true,
+      });
+    }
+    fetchMock
+      // 1. Job creation succeeds
+      .mockResolvedValueOnce(jsonResponse({ job_id: "job-net" }, 202))
+      // 2. First poll → network error (TypeError)
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      // 3. Retry poll → network error again
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      // 4. Retry poll → success
+      .mockResolvedValueOnce(
+        jsonResponse({
+          status: "done",
+          result: { raw: "Network retry transcript" },
+        })
+      );
+
+    try {
+      render(<Home />);
+
+      const fileInput = screen.getByLabelText("Last opp lydfil");
+      const testFile = new File(["fake"], "test.wav", { type: "audio/wav" });
+      await user.upload(fileInput, testFile);
+
+      const submitButton = screen.getByRole("button", { name: "Start transkribering" });
+      const form = submitButton.closest("form");
+      expect(form).not.toBeNull();
+      if (form) {
+        (form as HTMLFormElement).noValidate = true;
+        await act(async () => {
+          const event = new Event("submit", { bubbles: true, cancelable: true });
+          form.dispatchEvent(event);
+        });
+      }
+
+      // Wait for job creation
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/jobs",
+          expect.objectContaining({ method: "POST" })
+        )
+      );
+
+      // First poll → TypeError, triggers retry with backoff (2000 * 1 = 2s)
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+
+      // Second poll → TypeError, triggers retry with backoff (2000 * 2 = 4s)
+      await act(async () => {
+        jest.advanceTimersByTime(4000);
+      });
+
+      expect(await screen.findByText("Network retry transcript")).toBeInTheDocument();
     } finally {
       jest.useRealTimers();
       if (originalFetch) {
