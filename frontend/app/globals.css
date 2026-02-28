@@ -70,3 +70,18 @@
 .font-road-rage {
   font-family: var(--font-road-rage);
 }
+
+.app-shell-background {
+  background-color: #050816;
+}
+
+@media (display-mode: standalone) {
+  .app-shell-background {
+    background-image:
+      linear-gradient(rgba(5, 8, 22, 0.45), rgba(5, 8, 22, 0.45)),
+      url("/app-background.webp");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+  }
+}

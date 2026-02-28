@@ -25,9 +25,7 @@ const roadRage = localFont({
 export const metadata: Metadata = {
   title: "NB-transcribe",
   description: "Transkriber lydfiler med norsk tale i synthwave-stil",
-  icons: {
-    icon: "/logo.svg",
-  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -36,13 +34,17 @@ export default function RootLayout({
   return (
     <html lang="no">
       <head>
+        <meta name="theme-color" content="#050816" />
         <link
           href="https://fonts.googleapis.com/icon?family=Material+Icons"
           rel="stylesheet"
         />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
       </head>
       <body
-        className={`${orbitron.variable} ${roboto.variable} ${roadRage.variable} antialiased bg-black text-white`}
+        className={`${orbitron.variable} ${roboto.variable} ${roadRage.variable} app-shell-background antialiased text-white`}
       >
         <Navbar />
         <div>{children}</div>
