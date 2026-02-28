@@ -71,6 +71,14 @@ def patched_main(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_health_endpoint(patched_main):
+    response = await patched_main.health()
+    assert response.status_code == 200
+    payload = json.loads(response.body.decode())
+    assert payload == {"status": "ok"}
+
+
+@pytest.mark.asyncio
 async def test_process_endpoint_transcribes(patched_main):
     upload = UploadFile(filename="test.wav", file=io.BytesIO(b"fake-bytes"))
     response = await patched_main.process(upload)

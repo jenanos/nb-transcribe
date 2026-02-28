@@ -13,7 +13,54 @@ const jsonResponse = (payload: any, status = 200) =>
 import Home from "../page";
 
 describe("Home page", () => {
+  let originalFetch: typeof globalThis.fetch | undefined;
+  let originalWindowFetch: typeof window.fetch | undefined;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalWindowFetch = typeof window !== "undefined" ? window.fetch : undefined;
+  });
+
+  afterEach(() => {
+    if (originalFetch) {
+      Object.defineProperty(globalThis, "fetch", {
+        value: originalFetch,
+        configurable: true,
+        writable: true,
+      });
+    } else {
+      Reflect.deleteProperty(globalThis as Record<string, unknown>, "fetch");
+    }
+    if (typeof window !== "undefined") {
+      if (originalWindowFetch) {
+        Object.defineProperty(window, "fetch", {
+          value: originalWindowFetch,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        Reflect.deleteProperty(window as unknown as Record<string, unknown>, "fetch");
+      }
+    }
+  });
+
+  const setFetchMock = (mock: jest.Mock) => {
+    Object.defineProperty(globalThis, "fetch", {
+      value: mock,
+      configurable: true,
+      writable: true,
+    });
+    if (typeof window !== "undefined") {
+      Object.defineProperty(window, "fetch", {
+        value: mock,
+        configurable: true,
+        writable: true,
+      });
+    }
+  };
+
   test("viser opplastingsskjema", () => {
+    setFetchMock(jest.fn().mockResolvedValue(jsonResponse({ status: "ok" })));
     render(<Home />);
 
     expect(
@@ -39,22 +86,10 @@ describe("Home page", () => {
       }
     }
     (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
-    const originalFetch = globalThis.fetch;
-    const originalWindowFetch = typeof window !== "undefined" ? window.fetch : undefined;
     const fetchMock = jest.fn();
-    Object.defineProperty(globalThis, "fetch", {
-      value: fetchMock,
-      configurable: true,
-      writable: true,
-    });
-    if (typeof window !== "undefined") {
-      Object.defineProperty(window, "fetch", {
-        value: fetchMock,
-        configurable: true,
-        writable: true,
-      });
-    }
+    setFetchMock(fetchMock);
     fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-123" }, 202))
       .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
       .mockResolvedValueOnce(
@@ -96,26 +131,6 @@ describe("Home page", () => {
       expect(await screen.findByText("Rå tekst")).toBeInTheDocument();
     } finally {
       jest.useRealTimers();
-      if (originalFetch) {
-        Object.defineProperty(globalThis, "fetch", {
-          value: originalFetch,
-          configurable: true,
-          writable: true,
-        });
-      } else {
-        Reflect.deleteProperty(globalThis as Record<string, unknown>, "fetch");
-      }
-      if (typeof window !== "undefined") {
-        if (originalWindowFetch) {
-          Object.defineProperty(window, "fetch", {
-            value: originalWindowFetch,
-            configurable: true,
-            writable: true,
-          });
-        } else {
-          Reflect.deleteProperty(window as unknown as Record<string, unknown>, "fetch");
-        }
-      }
       if (originalFormData) {
         (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
       } else {
@@ -135,23 +150,11 @@ describe("Home page", () => {
       }
     }
     (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
-    const originalFetch = globalThis.fetch;
-    const originalWindowFetch = typeof window !== "undefined" ? window.fetch : undefined;
     const fetchMock = jest.fn();
-    Object.defineProperty(globalThis, "fetch", {
-      value: fetchMock,
-      configurable: true,
-      writable: true,
-    });
-    if (typeof window !== "undefined") {
-      Object.defineProperty(window, "fetch", {
-        value: fetchMock,
-        configurable: true,
-        writable: true,
-      });
-    }
-    // Chunked flow: init → append → finalize → poll done
+    setFetchMock(fetchMock);
+    // Health check + Chunked flow: init → append → finalize → poll done
     fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       .mockResolvedValueOnce(jsonResponse({ upload_id: "upl-1" }))        // init
       .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // append
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-chunked", status: "queued" }, 202)) // finalize
@@ -194,26 +197,6 @@ describe("Home page", () => {
       expect(await screen.findByText("Chunked result")).toBeInTheDocument();
     } finally {
       jest.useRealTimers();
-      if (originalFetch) {
-        Object.defineProperty(globalThis, "fetch", {
-          value: originalFetch,
-          configurable: true,
-          writable: true,
-        });
-      } else {
-        Reflect.deleteProperty(globalThis as Record<string, unknown>, "fetch");
-      }
-      if (typeof window !== "undefined") {
-        if (originalWindowFetch) {
-          Object.defineProperty(window, "fetch", {
-            value: originalWindowFetch,
-            configurable: true,
-            writable: true,
-          });
-        } else {
-          Reflect.deleteProperty(window as unknown as Record<string, unknown>, "fetch");
-        }
-      }
       if (originalFormData) {
         (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
       } else {
@@ -233,22 +216,10 @@ describe("Home page", () => {
       }
     }
     (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
-    const originalFetch = globalThis.fetch;
-    const originalWindowFetch = typeof window !== "undefined" ? window.fetch : undefined;
     const fetchMock = jest.fn();
-    Object.defineProperty(globalThis, "fetch", {
-      value: fetchMock,
-      configurable: true,
-      writable: true,
-    });
-    if (typeof window !== "undefined") {
-      Object.defineProperty(window, "fetch", {
-        value: fetchMock,
-        configurable: true,
-        writable: true,
-      });
-    }
+    setFetchMock(fetchMock);
     fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       // 1. Job creation succeeds
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-retry" }, 202))
       // 2. First poll → transient 502
@@ -307,26 +278,6 @@ describe("Home page", () => {
       expect(await screen.findByText("Retried transcript")).toBeInTheDocument();
     } finally {
       jest.useRealTimers();
-      if (originalFetch) {
-        Object.defineProperty(globalThis, "fetch", {
-          value: originalFetch,
-          configurable: true,
-          writable: true,
-        });
-      } else {
-        Reflect.deleteProperty(globalThis as Record<string, unknown>, "fetch");
-      }
-      if (typeof window !== "undefined") {
-        if (originalWindowFetch) {
-          Object.defineProperty(window, "fetch", {
-            value: originalWindowFetch,
-            configurable: true,
-            writable: true,
-          });
-        } else {
-          Reflect.deleteProperty(window as unknown as Record<string, unknown>, "fetch");
-        }
-      }
       if (originalFormData) {
         (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
       } else {
@@ -346,22 +297,10 @@ describe("Home page", () => {
       }
     }
     (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
-    const originalFetch = globalThis.fetch;
-    const originalWindowFetch = typeof window !== "undefined" ? window.fetch : undefined;
     const fetchMock = jest.fn();
-    Object.defineProperty(globalThis, "fetch", {
-      value: fetchMock,
-      configurable: true,
-      writable: true,
-    });
-    if (typeof window !== "undefined") {
-      Object.defineProperty(window, "fetch", {
-        value: fetchMock,
-        configurable: true,
-        writable: true,
-      });
-    }
+    setFetchMock(fetchMock);
     fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       // 1. Job creation succeeds
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-net" }, 202))
       // 2. First poll → network error (TypeError)
@@ -415,31 +354,51 @@ describe("Home page", () => {
       expect(await screen.findByText("Network retry transcript")).toBeInTheDocument();
     } finally {
       jest.useRealTimers();
-      if (originalFetch) {
-        Object.defineProperty(globalThis, "fetch", {
-          value: originalFetch,
-          configurable: true,
-          writable: true,
-        });
-      } else {
-        Reflect.deleteProperty(globalThis as Record<string, unknown>, "fetch");
-      }
-      if (typeof window !== "undefined") {
-        if (originalWindowFetch) {
-          Object.defineProperty(window, "fetch", {
-            value: originalWindowFetch,
-            configurable: true,
-            writable: true,
-          });
-        } else {
-          Reflect.deleteProperty(window as unknown as Record<string, unknown>, "fetch");
-        }
-      }
       if (originalFormData) {
         (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
       } else {
         Reflect.deleteProperty(globalThis as Record<string, unknown>, "FormData");
       }
     }
+  });
+
+  test("shows backend unavailable banner when health check fails", async () => {
+    setFetchMock(jest.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    render(<Home />);
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Backend utilgjengelig")).toBeInTheDocument();
+  });
+
+  test("does not show banner when health check succeeds", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ status: "ok" }));
+    setFetchMock(fetchMock);
+
+    render(<Home />);
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/health",
+        expect.objectContaining({ cache: "no-store", credentials: "include" })
+      )
+    );
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("banner can be dismissed", async () => {
+    const user = userEvent.setup();
+    setFetchMock(jest.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    render(<Home />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toBeInTheDocument();
+
+    const closeButton = screen.getByRole("button", { name: "Lukk varsel" });
+    await user.click(closeButton);
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
