@@ -67,7 +67,7 @@ export default function Home() {
     const healthUrl = HAS_DIRECT_UPLOAD
       ? `${DIRECT_UPLOAD_BASE}/health`
       : "/api/health";
-    fetch(healthUrl, { cache: "no-store" })
+    fetch(healthUrl, { cache: "no-store", credentials: "include" })
       .then((res) => {
         if (!res.ok) setBackendDown(true);
       })
@@ -330,12 +330,12 @@ export default function Home() {
       {backendDown && (
         <div role="alert" className="fixed top-16 left-0 right-0 z-30 flex justify-center pointer-events-none">
           <div className="mt-2 w-full max-w-xl rounded-xl border border-red-400 bg-black/90 px-5 py-3 text-sm text-gray-100 shadow-[0_0_15px_#ff3333] pointer-events-auto flex items-center gap-3">
-            <span className="material-icons text-red-400">error_outline</span>
+            <span className="material-icons text-red-400" aria-hidden="true">error_outline</span>
             <span>
               <strong className="text-red-400">Backend utilgjengelig</strong> – Transkribering er ikke mulig akkurat nå. Prøv igjen senere.
             </span>
             <button onClick={() => setBackendDown(false)} className="ml-auto text-gray-400 hover:text-white transition" aria-label="Lukk varsel">
-              <span className="material-icons">close</span>
+              <span className="material-icons" aria-hidden="true">close</span>
             </button>
           </div>
         </div>

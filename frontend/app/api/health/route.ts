@@ -17,6 +17,7 @@ export async function GET() {
   try {
     const upstream = await fetch(`${BACKEND_BASE_URL}/health`, {
       headers: withCloudflareAccessHeaders(),
+      cache: "no-store",
     });
     return await forwardResponse(upstream);
   } catch {

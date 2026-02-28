@@ -380,7 +380,7 @@ describe("Home page", () => {
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/health",
-        expect.objectContaining({ cache: "no-store" })
+        expect.objectContaining({ cache: "no-store", credentials: "include" })
       )
     );
 
