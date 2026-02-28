@@ -346,6 +346,11 @@ async def chunked_finalize(upload_id: str):
     return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)
 
 
+@app.get("/health")
+async def health():
+    return JSONResponse({"status": "ok"})
+
+
 @app.get("/transcriptions")
 async def get_transcriptions(limit: int = 50):
     if not is_database_configured():
