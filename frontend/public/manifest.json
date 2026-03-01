@@ -25,5 +25,15 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "id": "/",
+  "scope": "/",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "categories": [
+    "productivity",
+    "utilities"
   ]
 }

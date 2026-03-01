@@ -3,6 +3,7 @@ import { Orbitron, Roboto } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import Navbar from "./components/Navbar";
+import PwaRegistrar from "./components/PwaRegistrar";
 
 const orbitron = Orbitron({
   weight: ["400", "700"],
@@ -47,6 +48,7 @@ export default function RootLayout({
         className={`${orbitron.variable} ${roboto.variable} ${roadRage.variable} app-shell-background antialiased text-white`}
       >
         <Navbar />
+        <PwaRegistrar />
         <div>{children}</div>
       </body>
     </html>
