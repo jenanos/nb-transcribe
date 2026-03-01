@@ -24,7 +24,7 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center space-x-3">
           <div className="relative h-10 w-10 overflow-hidden rounded-md shadow-[0_0_10px_#00e5ff]">
-            <Image src="/logo.svg" alt="NB-transcribe logo" fill className="object-cover" />
+            <Image src="/icons/icon-192.png" alt="NB-transcribe ikon" fill className="object-cover" />
           </div>
           <div>
             <p className="font-orbitron text-lg">NB-transcribe</p>

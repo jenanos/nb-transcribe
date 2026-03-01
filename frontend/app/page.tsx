@@ -13,6 +13,8 @@ const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 const CHUNKED_UPLOAD_THRESHOLD = 1 * 1024 * 1024; // 1 MB – bruk chunked upload tidlig for å unngå 502 via proxy
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
 const POLL_MAX_RETRIES = 20;
+const HEALTHCHECK_INTERVAL_MS = 30000;
+const HEALTHCHECK_TIMEOUT_MS = 8000;
 
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =
@@ -64,16 +66,45 @@ export default function Home() {
 
   useEffect(() => {
     if (MOCK_MODE) return;
-    const healthUrl = HAS_DIRECT_UPLOAD
-      ? `${DIRECT_UPLOAD_BASE}/health`
-      : "/api/health";
-    fetch(healthUrl, { cache: "no-store", credentials: "include" })
-      .then((res) => {
-        if (!res.ok) setBackendDown(true);
-      })
-      .catch(() => {
-        setBackendDown(true);
-      });
+
+    let active = true;
+
+    const checkHealth = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), HEALTHCHECK_TIMEOUT_MS);
+
+      const healthCheckUrl = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/health` : "/api/health";
+
+      try {
+        const res = await fetch(healthCheckUrl, {
+          cache: "no-store",
+          credentials: "include",
+          signal: controller.signal,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        setBackendDown(!res.ok);
+      } catch {
+        if (active) {
+          setBackendDown(true);
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    void checkHealth();
+    const intervalId = setInterval(() => {
+      void checkHealth();
+    }, HEALTHCHECK_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   async function uploadChunked(file: File, baseUrl: string): Promise<{ job_id: string }> {
