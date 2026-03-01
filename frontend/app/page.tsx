@@ -15,6 +15,7 @@ const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
 const POLL_MAX_RETRIES = 20;
 const HEALTHCHECK_INTERVAL_MS = 30000;
 const HEALTHCHECK_TIMEOUT_MS = 8000;
+const HEALTHCHECK_GRACE_AFTER_SUCCESS_MS = 2 * 60 * 1000;
 
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =
@@ -33,6 +34,17 @@ export default function Home() {
   const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
   const [backendDown, setBackendDown] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastBackendSuccessRef = useRef<number>(0);
+  const activeJobIdRef = useRef<string | null>(null);
+
+  const markBackendSuccess = () => {
+    lastBackendSuccessRef.current = Date.now();
+    setBackendDown(false);
+  };
+
+  useEffect(() => {
+    activeJobIdRef.current = activeJobId;
+  }, [activeJobId]);
 
   const clearPollTimeout = () => {
     if (pollTimeoutRef.current) {
@@ -86,10 +98,26 @@ export default function Home() {
           return;
         }
 
-        setBackendDown(!res.ok);
+        if (res.ok) {
+          markBackendSuccess();
+          return;
+        }
+
+        const hasRecentBackendSuccess =
+          Date.now() - lastBackendSuccessRef.current < HEALTHCHECK_GRACE_AFTER_SUCCESS_MS;
+        const hasActiveJob = !!activeJobIdRef.current;
+
+        if (!hasRecentBackendSuccess && !hasActiveJob) {
+          setBackendDown(true);
+        }
       } catch {
         if (active) {
-          setBackendDown(true);
+          const hasRecentBackendSuccess =
+            Date.now() - lastBackendSuccessRef.current < HEALTHCHECK_GRACE_AFTER_SUCCESS_MS;
+          const hasActiveJob = !!activeJobIdRef.current;
+          if (!hasRecentBackendSuccess && !hasActiveJob) {
+            setBackendDown(true);
+          }
         }
       } finally {
         clearTimeout(timeoutId);
@@ -115,6 +143,7 @@ export default function Home() {
       throw new Error(`${initRes.status} ${initRes.statusText} – ${t}`);
     }
     const { upload_id } = await initRes.json();
+    markBackendSuccess();
 
     let offset = 0;
     while (offset < file.size) {
@@ -131,6 +160,7 @@ export default function Home() {
         const t = await appendRes.text();
         throw new Error(`${appendRes.status} ${appendRes.statusText} – ${t}`);
       }
+      markBackendSuccess();
       offset = end;
     }
 
@@ -142,6 +172,7 @@ export default function Home() {
       const t = await finalRes.text();
       throw new Error(`${finalRes.status} ${finalRes.statusText} – ${t}`);
     }
+    markBackendSuccess();
     return await finalRes.json();
   }
 
@@ -185,6 +216,7 @@ export default function Home() {
           const t = await create.text();
           throw new Error(`${create.status} ${create.statusText} – ${t}`);
         }
+        markBackendSuccess();
         const data = await create.json();
         job_id = data.job_id;
       }
@@ -246,6 +278,7 @@ export default function Home() {
         }
 
         consecutiveErrors = 0;
+        markBackendSuccess();
 
         if (!data) {
           throw new Error("Kunne ikke tolke svar fra serveren.");
