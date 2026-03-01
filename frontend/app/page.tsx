@@ -278,12 +278,13 @@ export default function Home() {
         }
 
         consecutiveErrors = 0;
-        markBackendSuccess();
+        if (cancelled) return;
 
         if (!data) {
           throw new Error("Kunne ikke tolke svar fra serveren.");
         }
-        if (cancelled) return;
+
+        markBackendSuccess();
 
         if (data.status === "done") {
           const raw = data?.result?.raw ?? "";

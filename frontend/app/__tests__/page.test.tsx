@@ -430,4 +430,95 @@ describe("Home page", () => {
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  test("banner stays hidden when health check fails within grace period after a successful check", async () => {
+    jest.useFakeTimers();
+    const fetchMock = jest.fn();
+    setFetchMock(fetchMock);
+    // First health check succeeds → markBackendSuccess sets lastBackendSuccessRef
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: "ok" }));
+    // All subsequent health checks fail
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    try {
+      render(<Home />);
+
+      // Wait for initial successful health check
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      // Advance past HEALTHCHECK_INTERVAL_MS (30 s) to trigger the failing re-check
+      await act(async () => {
+        jest.advanceTimersByTime(30000);
+      });
+
+      // Banner should remain hidden – within HEALTHCHECK_GRACE_AFTER_SUCCESS_MS of last success
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("banner stays hidden when health check fails while a job is active", async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const originalFormData = globalThis.FormData;
+    class MockFormData {
+      private readonly store = new Map<string, unknown>();
+      append(key: string, value: unknown) {
+        this.store.set(key, value);
+      }
+    }
+    (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
+    const fetchMock = jest.fn();
+    setFetchMock(fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))             // initial health check
+      .mockResolvedValueOnce(jsonResponse({ job_id: "job-hc" }, 202))   // job creation
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }))         // first poll at ~2 s
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))            // health check at ~30 s fails
+      .mockResolvedValueOnce(jsonResponse({ status: "done", result: { raw: "ok" } })); // second poll
+
+    try {
+      render(<Home />);
+
+      const fileInput = screen.getByLabelText("Last opp lydfil");
+      await user.upload(fileInput, new File(["fake"], "test.wav", { type: "audio/wav" }));
+
+      const form = screen.getByRole("button", { name: "Start transkribering" }).closest("form");
+      if (form) {
+        (form as HTMLFormElement).noValidate = true;
+        await act(async () => {
+          form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        });
+      }
+
+      // Wait for job creation so activeJobId is set
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/jobs",
+          expect.objectContaining({ method: "POST" })
+        )
+      );
+
+      // Advance 2 s → first poll fires (returns "queued", job still active)
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+
+      // Advance remaining 28 s → health check interval fires (fails) while job is active
+      await act(async () => {
+        jest.advanceTimersByTime(28000);
+      });
+
+      // Banner should NOT appear because activeJobId is set
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+      if (originalFormData) {
+        (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
+      } else {
+        Reflect.deleteProperty(globalThis as Record<string, unknown>, "FormData");
+      }
+    }
+  });
 });
