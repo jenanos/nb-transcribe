@@ -20,6 +20,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith("/api/")) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) {
@@ -34,7 +39,12 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => caches.match("/"));
+        .catch((error) => {
+          if (event.request.mode === "navigate") {
+            return caches.match("/");
+          }
+          return Promise.reject(error);
+        });
     })
   );
 });

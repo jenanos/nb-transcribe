@@ -73,8 +73,10 @@ export default function Home() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), HEALTHCHECK_TIMEOUT_MS);
 
+      const healthCheckUrl = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/health` : "/api/health";
+
       try {
-        const res = await fetch("/api/health", {
+        const res = await fetch(healthCheckUrl, {
           cache: "no-store",
           credentials: "include",
           signal: controller.signal,

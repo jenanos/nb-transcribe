@@ -371,6 +371,35 @@ describe("Home page", () => {
     expect(screen.getByText("Backend utilgjengelig")).toBeInTheDocument();
   });
 
+  test("banner disappears when health check recovers after a transient failure", async () => {
+    jest.useFakeTimers();
+    const fetchMock = jest.fn();
+    setFetchMock(fetchMock);
+    // First health check fails → banner appears
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    // Re-check (after interval) succeeds → banner disappears
+    fetchMock.mockResolvedValue(jsonResponse({ status: "ok" }));
+
+    try {
+      render(<Home />);
+
+      // Banner appears after first (failed) health check
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+      // Advance past HEALTHCHECK_INTERVAL_MS (30 s) to trigger re-check
+      await act(async () => {
+        jest.advanceTimersByTime(30000);
+      });
+
+      // Banner should be gone after the successful re-check
+      await waitFor(() =>
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test("does not show banner when health check succeeds", async () => {
     const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ status: "ok" }));
     setFetchMock(fetchMock);
