@@ -60,7 +60,7 @@ describe("Home page", () => {
   };
 
   test("viser opplastingsskjema", () => {
-    setFetchMock(jest.fn().mockResolvedValue(jsonResponse({ status: "ok" })));
+    setFetchMock(jest.fn());
     render(<Home />);
 
     expect(
@@ -89,7 +89,6 @@ describe("Home page", () => {
     const fetchMock = jest.fn();
     setFetchMock(fetchMock);
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-123" }, 202))
       .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
       .mockResolvedValueOnce(
@@ -152,9 +151,8 @@ describe("Home page", () => {
     (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = MockFormData as unknown as typeof FormData;
     const fetchMock = jest.fn();
     setFetchMock(fetchMock);
-    // Health check + Chunked flow: init → append → finalize → poll done
+    // Chunked flow: init → append → finalize → poll done
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       .mockResolvedValueOnce(jsonResponse({ upload_id: "upl-1" }))        // init
       .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // append
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-chunked", status: "queued" }, 202)) // finalize
@@ -219,7 +217,6 @@ describe("Home page", () => {
     const fetchMock = jest.fn();
     setFetchMock(fetchMock);
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       // 1. Job creation succeeds
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-retry" }, 202))
       // 2. First poll → transient 502
@@ -300,7 +297,6 @@ describe("Home page", () => {
     const fetchMock = jest.fn();
     setFetchMock(fetchMock);
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ status: "ok" }))              // health check
       // 1. Job creation succeeds
       .mockResolvedValueOnce(jsonResponse({ job_id: "job-net" }, 202))
       // 2. First poll → network error (TypeError)
@@ -362,72 +358,4 @@ describe("Home page", () => {
     }
   });
 
-  test("shows backend unavailable banner when health check fails", async () => {
-    setFetchMock(jest.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-
-    render(<Home />);
-
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(screen.getByText("Backend utilgjengelig")).toBeInTheDocument();
-  });
-
-  test("banner disappears when health check recovers after a transient failure", async () => {
-    jest.useFakeTimers();
-    const fetchMock = jest.fn();
-    setFetchMock(fetchMock);
-    // First health check fails → banner appears
-    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    // Re-check (after interval) succeeds → banner disappears
-    fetchMock.mockResolvedValue(jsonResponse({ status: "ok" }));
-
-    try {
-      render(<Home />);
-
-      // Banner appears after first (failed) health check
-      expect(await screen.findByRole("alert")).toBeInTheDocument();
-
-      // Advance past HEALTHCHECK_INTERVAL_MS (30 s) to trigger re-check
-      await act(async () => {
-        jest.advanceTimersByTime(30000);
-      });
-
-      // Banner should be gone after the successful re-check
-      await waitFor(() =>
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
-      );
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  test("does not show banner when health check succeeds", async () => {
-    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ status: "ok" }));
-    setFetchMock(fetchMock);
-
-    render(<Home />);
-
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/health",
-        expect.objectContaining({ cache: "no-store", credentials: "include" })
-      )
-    );
-
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  test("banner can be dismissed", async () => {
-    const user = userEvent.setup();
-    setFetchMock(jest.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-
-    render(<Home />);
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toBeInTheDocument();
-
-    const closeButton = screen.getByRole("button", { name: "Lukk varsel" });
-    await user.click(closeButton);
-
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
 });

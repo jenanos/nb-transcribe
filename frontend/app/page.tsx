@@ -13,8 +13,6 @@ const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 const CHUNKED_UPLOAD_THRESHOLD = 1 * 1024 * 1024; // 1 MB – bruk chunked upload tidlig for å unngå 502 via proxy
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
 const POLL_MAX_RETRIES = 20;
-const HEALTHCHECK_INTERVAL_MS = 30000;
-const HEALTHCHECK_TIMEOUT_MS = 8000;
 
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =
@@ -31,7 +29,6 @@ export default function Home() {
   const [jobStatusBaseUrl, setJobStatusBaseUrl] = useState<string | null>(null);
   const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
   const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
-  const [backendDown, setBackendDown] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearPollTimeout = () => {
@@ -62,49 +59,6 @@ export default function Home() {
         return prev;
       }
     });
-  }, []);
-
-  useEffect(() => {
-    if (MOCK_MODE) return;
-
-    let active = true;
-
-    const checkHealth = async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), HEALTHCHECK_TIMEOUT_MS);
-
-      const healthCheckUrl = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/health` : "/api/health";
-
-      try {
-        const res = await fetch(healthCheckUrl, {
-          cache: "no-store",
-          credentials: "include",
-          signal: controller.signal,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        setBackendDown(!res.ok);
-      } catch {
-        if (active) {
-          setBackendDown(true);
-        }
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    };
-
-    void checkHealth();
-    const intervalId = setInterval(() => {
-      void checkHealth();
-    }, HEALTHCHECK_INTERVAL_MS);
-
-    return () => {
-      active = false;
-      clearInterval(intervalId);
-    };
   }, []);
 
   async function uploadChunked(file: File, baseUrl: string): Promise<{ job_id: string }> {
@@ -353,20 +307,6 @@ export default function Home() {
               className="rounded-lg bg-pink-500 px-3 py-2 font-semibold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
             >
               Understood
-            </button>
-          </div>
-        </div>
-      )}
-
-      {backendDown && (
-        <div role="alert" className="fixed top-16 left-0 right-0 z-30 flex justify-center pointer-events-none">
-          <div className="mt-2 w-full max-w-xl rounded-xl border border-red-400 bg-black/90 px-5 py-3 text-sm text-gray-100 shadow-[0_0_15px_#ff3333] pointer-events-auto flex items-center gap-3">
-            <span className="material-icons text-red-400" aria-hidden="true">error_outline</span>
-            <span>
-              <strong className="text-red-400">Backend utilgjengelig</strong> – Transkribering er ikke mulig akkurat nå. Prøv igjen senere.
-            </span>
-            <button onClick={() => setBackendDown(false)} className="ml-auto text-gray-400 hover:text-white transition" aria-label="Lukk varsel">
-              <span className="material-icons" aria-hidden="true">close</span>
             </button>
           </div>
         </div>
