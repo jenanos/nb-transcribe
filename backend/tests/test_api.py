@@ -30,6 +30,9 @@ def _ensure_transcribe_importable():
     tf_stub = sys.modules["transformers"]
     if not hasattr(tf_stub, "pipeline"):
         tf_stub.pipeline = lambda *a, **kw: None  # type: ignore[attr-defined]
+    if not hasattr(tf_stub, "AutoConfig"):
+        auto_config = types.SimpleNamespace(from_pretrained=lambda *a, **kw: None)
+        tf_stub.AutoConfig = auto_config  # type: ignore[attr-defined]
 
 
 def _patch_transcribe(monkeypatch, tmp_path: Path):
