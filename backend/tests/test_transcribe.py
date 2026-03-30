@@ -24,6 +24,9 @@ def _ensure_stubs():
     tf_stub = sys.modules["transformers"]
     if not hasattr(tf_stub, "pipeline"):
         tf_stub.pipeline = lambda *a, **kw: None  # type: ignore[attr-defined]
+    if not hasattr(tf_stub, "AutoConfig"):
+        auto_config = types.SimpleNamespace(from_pretrained=lambda *a, **kw: None)
+        tf_stub.AutoConfig = auto_config  # type: ignore[attr-defined]
 
 
 _ensure_stubs()
@@ -80,3 +83,37 @@ def test_transcribe_segments_empty():
 
     assert asr.calls == []
     assert result == ""
+
+
+def test_create_asr_pipeline_passes_float_mask_feature_prob(monkeypatch):
+    """Verify create_asr_pipeline loads config with mask_feature_prob as float."""
+    import transcribe
+
+    monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/ffmpeg")
+
+    torch_stub = sys.modules["torch"]
+    monkeypatch.setattr(torch_stub.cuda, "is_available", lambda: True)
+
+    captured_config_kwargs = {}
+    captured_pipeline_kwargs = {}
+
+    def fake_from_pretrained(*args, **kwargs):
+        captured_config_kwargs.update(kwargs)
+        captured_config_kwargs["model_name"] = args[0] if args else None
+        return "fake-config"
+
+    def fake_pipeline(*args, **kwargs):
+        captured_pipeline_kwargs.update(kwargs)
+        return "fake-pipeline"
+
+    fake_auto_config = types.SimpleNamespace(from_pretrained=fake_from_pretrained)
+    monkeypatch.setattr(transcribe, "AutoConfig", fake_auto_config)
+    monkeypatch.setattr(transcribe, "pipeline", fake_pipeline)
+
+    result = transcribe.create_asr_pipeline()
+
+    assert result == "fake-pipeline"
+    assert captured_config_kwargs["model_name"] == "NbAiLabBeta/nb-whisper-large"
+    assert captured_config_kwargs["mask_feature_prob"] == 0.0
+    assert isinstance(captured_config_kwargs["mask_feature_prob"], float)
+    assert captured_pipeline_kwargs["config"] == "fake-config"

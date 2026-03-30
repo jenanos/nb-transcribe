@@ -4,7 +4,9 @@ import subprocess
 import tempfile
 import torch
 import soundfile as sf
-from transformers import pipeline
+from transformers import AutoConfig, pipeline
+
+MODEL_NAME = "NbAiLabBeta/nb-whisper-large"
 
 
 def ensure_ffmpeg():
@@ -20,9 +22,16 @@ def create_asr_pipeline(batch_size: int = 4):
     ensure_ffmpeg()
     if not torch.cuda.is_available():
         raise RuntimeError("Ingen CUDA‑enhet funnet. Sørg for at GPU‑drivere og CUDA er installert.")
+
+    # Workaround: newer huggingface_hub versions enforce strict type validation
+    # on dataclass fields. The model config has mask_feature_prob=0 (int) but
+    # the field expects a float. Passing the value explicitly as 0.0 fixes it.
+    config = AutoConfig.from_pretrained(MODEL_NAME, mask_feature_prob=0.0)
+
     return pipeline(
         "automatic-speech-recognition",
-        model="NbAiLabBeta/nb-whisper-large",
+        model=MODEL_NAME,
+        config=config,
         return_timestamps=False,
         device=0,
         torch_dtype=torch.float16,
