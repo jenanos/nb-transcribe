@@ -1,3 +1,5 @@
+import contextlib
+import json
 import os
 import shutil
 import subprocess
@@ -17,46 +19,60 @@ def ensure_ffmpeg():
     os.environ["FFMPEG_BINARY"] = ffmpeg
 
 
+def _fix_cached_config_types(model_name: str) -> None:
+    """Fix int-vs-float type issues in the cached config.json.
+
+    Newer huggingface_hub versions enforce strict type validation on dataclass
+    fields. The model's config.json has integer 0 for fields that expect float
+    (e.g. mask_feature_prob). This rewrites the cached file so that ALL
+    subsequent from_pretrained calls (config, model, processor, tokenizer)
+    use correct types.
+    """
+    from huggingface_hub import hf_hub_download
+
+    try:
+        config_path = hf_hub_download(model_name, "config.json")
+        with open(config_path) as f:
+            config_data = json.load(f)
+
+        changed = False
+        for key in list(config_data):
+            if isinstance(config_data[key], int) and not isinstance(config_data[key], bool):
+                if key.endswith(("_prob", "_dropout", "_rate", "_eps")):
+                    config_data[key] = float(config_data[key])
+                    changed = True
+
+        if changed:
+            # Atomic write: temp file + os.replace to avoid corrupted cache
+            dir_name = os.path.dirname(config_path)
+            fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".json")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(config_data, f, indent=2)
+                os.replace(tmp_path, config_path)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.remove(tmp_path)
+                raise
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to fix cached config types for model '{model_name}'. "
+            "Check Hugging Face hub connectivity and local cache integrity."
+        ) from e
+
+
 def create_asr_pipeline(batch_size: int = 4):
     """Oppretter ASR-pipeline på GPU med fp16 og batching."""
     ensure_ffmpeg()
     if not torch.cuda.is_available():
         raise RuntimeError("Ingen CUDA‑enhet funnet. Sørg for at GPU‑drivere og CUDA er installert.")
 
-    # Workaround: newer huggingface_hub versions enforce strict type validation
-    # on dataclass fields. The model config JSON has integer 0 for fields that
-    # expect float (e.g. mask_feature_prob). AutoConfig.from_pretrained kwargs
-    # are applied AFTER the constructor, so we must fix the raw dict first.
-    # Imports are local to avoid requiring transformers submodules at module
-    # import time, which would break lightweight test stubs.
-    from transformers.configuration_utils import PretrainedConfig
-    from transformers.models.auto.configuration_auto import CONFIG_MAPPING
-
-    config_dict, _ = PretrainedConfig.get_config_dict(MODEL_NAME)
-    for key in list(config_dict):
-        if isinstance(config_dict[key], int) and not isinstance(config_dict[key], bool):
-            if key.endswith(("_prob", "_dropout", "_rate", "_eps")):
-                config_dict[key] = float(config_dict[key])
-    if "mask_feature_prob" not in config_dict:
-        config_dict["mask_feature_prob"] = 0.0
-    config_class = CONFIG_MAPPING[config_dict["model_type"]]
-    config = config_class.from_dict(config_dict)
-
-    # Load the model explicitly with our fixed config so that pipeline()
-    # does not call AutoConfig.from_pretrained again (which would hit the
-    # same strict-validation bug a second time).
-    from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
-
-    model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        MODEL_NAME, config=config, torch_dtype=torch.float16
-    )
-    processor = AutoProcessor.from_pretrained(MODEL_NAME)
+    # Fix cached config.json so all from_pretrained calls use correct types
+    _fix_cached_config_types(MODEL_NAME)
 
     return pipeline(
         "automatic-speech-recognition",
-        model=model,
-        tokenizer=processor.tokenizer,
-        feature_extractor=processor.feature_extractor,
+        model=MODEL_NAME,
         return_timestamps=False,
         device=0,
         torch_dtype=torch.float16,
