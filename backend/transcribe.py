@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import shutil
@@ -29,20 +30,35 @@ def _fix_cached_config_types(model_name: str) -> None:
     """
     from huggingface_hub import hf_hub_download
 
-    config_path = hf_hub_download(model_name, "config.json")
-    with open(config_path) as f:
-        config_data = json.load(f)
+    try:
+        config_path = hf_hub_download(model_name, "config.json")
+        with open(config_path) as f:
+            config_data = json.load(f)
 
-    changed = False
-    for key in list(config_data):
-        if isinstance(config_data[key], int) and not isinstance(config_data[key], bool):
-            if key.endswith(("_prob", "_dropout", "_rate", "_eps")):
-                config_data[key] = float(config_data[key])
-                changed = True
+        changed = False
+        for key in list(config_data):
+            if isinstance(config_data[key], int) and not isinstance(config_data[key], bool):
+                if key.endswith(("_prob", "_dropout", "_rate", "_eps")):
+                    config_data[key] = float(config_data[key])
+                    changed = True
 
-    if changed:
-        with open(config_path, "w") as f:
-            json.dump(config_data, f, indent=2)
+        if changed:
+            # Atomic write: temp file + os.replace to avoid corrupted cache
+            dir_name = os.path.dirname(config_path)
+            fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".json")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(config_data, f, indent=2)
+                os.replace(tmp_path, config_path)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.remove(tmp_path)
+                raise
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to fix cached config types for model '{model_name}'. "
+            "Check Hugging Face hub connectivity and local cache integrity."
+        ) from e
 
 
 def create_asr_pipeline(batch_size: int = 4):

@@ -132,8 +132,8 @@ def test_fix_cached_config_types_no_rewrite_when_already_float(tmp_path):
 
     config_data = {"model_type": "whisper", "mask_feature_prob": 0.0}
     config_path = tmp_path / "config.json"
-    config_path.write_text(json.dumps(config_data))
-    mtime_before = config_path.stat().st_mtime
+    original_content = json.dumps(config_data)
+    config_path.write_text(original_content)
 
     hf_hub_stub = types.ModuleType("huggingface_hub")
     hf_hub_stub.hf_hub_download = lambda *a, **kw: str(config_path)  # type: ignore[attr-defined]
@@ -145,5 +145,36 @@ def test_fix_cached_config_types_no_rewrite_when_already_float(tmp_path):
     finally:
         monkeypatch_mod.undo()
 
-    # File should not have been rewritten
-    assert config_path.stat().st_mtime == mtime_before
+    # File content should be unchanged (no rewrite needed)
+    assert config_path.read_text() == original_content
+
+
+def test_create_asr_pipeline_calls_fix_and_pipeline(monkeypatch):
+    """Verify create_asr_pipeline calls _fix_cached_config_types then pipeline."""
+    import transcribe
+
+    monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/ffmpeg")
+
+    torch_stub = sys.modules["torch"]
+    monkeypatch.setattr(torch_stub.cuda, "is_available", lambda: True)
+
+    fix_calls = []
+    pipeline_kwargs = {}
+
+    monkeypatch.setattr(transcribe, "_fix_cached_config_types",
+                        lambda model_name: fix_calls.append(model_name))
+
+    def fake_pipeline(*args, **kwargs):
+        pipeline_kwargs.update(kwargs)
+        pipeline_kwargs["_args"] = args
+        return "fake-pipeline"
+
+    monkeypatch.setattr(transcribe, "pipeline", fake_pipeline)
+
+    result = transcribe.create_asr_pipeline()
+
+    assert result == "fake-pipeline"
+    assert fix_calls == ["NbAiLabBeta/nb-whisper-large"]
+    assert pipeline_kwargs["_args"] == ("automatic-speech-recognition",)
+    assert pipeline_kwargs["model"] == "NbAiLabBeta/nb-whisper-large"
+    assert pipeline_kwargs["torch_dtype"] == "float16"
