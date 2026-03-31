@@ -42,10 +42,21 @@ def create_asr_pipeline(batch_size: int = 4):
     config_class = CONFIG_MAPPING[config_dict["model_type"]]
     config = config_class.from_dict(config_dict)
 
+    # Load the model explicitly with our fixed config so that pipeline()
+    # does not call AutoConfig.from_pretrained again (which would hit the
+    # same strict-validation bug a second time).
+    from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+
+    model = AutoModelForSpeechSeq2Seq.from_pretrained(
+        MODEL_NAME, config=config, torch_dtype=torch.float16
+    )
+    processor = AutoProcessor.from_pretrained(MODEL_NAME)
+
     return pipeline(
         "automatic-speech-recognition",
-        model=MODEL_NAME,
-        config=config,
+        model=model,
+        tokenizer=processor.tokenizer,
+        feature_extractor=processor.feature_extractor,
         return_timestamps=False,
         device=0,
         torch_dtype=torch.float16,

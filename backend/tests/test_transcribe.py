@@ -109,6 +109,18 @@ def test_create_asr_pipeline_fixes_int_to_float_in_config(monkeypatch):
 
     fake_config_class = types.SimpleNamespace(from_dict=fake_from_dict)
 
+    captured_model_kwargs = {}
+
+    def fake_from_pretrained(*args, **kwargs):
+        captured_model_kwargs.update(kwargs)
+        captured_model_kwargs["_args"] = args
+        return "fake-model"
+
+    fake_processor = types.SimpleNamespace(
+        tokenizer="fake-tokenizer",
+        feature_extractor="fake-feature-extractor",
+    )
+
     def fake_pipeline(*args, **kwargs):
         captured_pipeline_kwargs.update(kwargs)
         return "fake-pipeline"
@@ -120,6 +132,10 @@ def test_create_asr_pipeline_fixes_int_to_float_in_config(monkeypatch):
     )
     auto_config_stub = types.ModuleType("transformers.models.auto.configuration_auto")
     auto_config_stub.CONFIG_MAPPING = {"whisper": fake_config_class}  # type: ignore[attr-defined]
+
+    tf_stub = sys.modules["transformers"]
+    tf_stub.AutoModelForSpeechSeq2Seq = types.SimpleNamespace(from_pretrained=fake_from_pretrained)  # type: ignore[attr-defined]
+    tf_stub.AutoProcessor = types.SimpleNamespace(from_pretrained=lambda *a, **kw: fake_processor)  # type: ignore[attr-defined]
 
     monkeypatch.setitem(sys.modules, "transformers.configuration_utils", config_utils_stub)
     monkeypatch.setitem(sys.modules, "transformers.models", types.ModuleType("transformers.models"))
@@ -135,4 +151,8 @@ def test_create_asr_pipeline_fixes_int_to_float_in_config(monkeypatch):
     assert isinstance(captured_from_dict_args["mask_feature_prob"], float)
     # attention_dropout should also be converted to float
     assert isinstance(captured_from_dict_args["attention_dropout"], float)
-    assert captured_pipeline_kwargs["config"] == "fake-config"
+    # Model should be loaded with fixed config and correct dtype
+    assert captured_model_kwargs["config"] == "fake-config"
+    assert captured_model_kwargs["torch_dtype"] == "float16"
+    # Model object should be passed to pipeline, not the model name string
+    assert captured_pipeline_kwargs["model"] == "fake-model"
