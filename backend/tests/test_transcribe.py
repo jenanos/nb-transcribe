@@ -27,6 +27,20 @@ def _ensure_stubs():
     if not hasattr(tf_stub, "AutoConfig"):
         auto_config = types.SimpleNamespace(from_pretrained=lambda *a, **kw: None)
         tf_stub.AutoConfig = auto_config  # type: ignore[attr-defined]
+    # Stub sub-modules used by create_asr_pipeline
+    for sub in ("transformers.configuration_utils", "transformers.models",
+                "transformers.models.auto", "transformers.models.auto.configuration_auto"):
+        if sub not in sys.modules:
+            sys.modules[sub] = types.ModuleType(sub)
+    config_utils = sys.modules["transformers.configuration_utils"]
+    if not hasattr(config_utils, "PretrainedConfig"):
+        config_utils.PretrainedConfig = types.SimpleNamespace(  # type: ignore[attr-defined]
+            get_config_dict=lambda *a, **kw: ({}, {}),
+        )
+    auto_config_mod = sys.modules["transformers.models.auto.configuration_auto"]
+    if not hasattr(auto_config_mod, "CONFIG_MAPPING"):
+        fake_config_class = types.SimpleNamespace(from_dict=lambda *a, **kw: "fake-config")
+        auto_config_mod.CONFIG_MAPPING = {"whisper": fake_config_class}  # type: ignore[attr-defined]
 
 
 _ensure_stubs()
@@ -85,8 +99,8 @@ def test_transcribe_segments_empty():
     assert result == ""
 
 
-def test_create_asr_pipeline_passes_float_mask_feature_prob(monkeypatch):
-    """Verify create_asr_pipeline loads config with mask_feature_prob as float."""
+def test_create_asr_pipeline_fixes_int_to_float_in_config(monkeypatch):
+    """Verify create_asr_pipeline converts int fields to float before instantiation."""
     import transcribe
 
     monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/ffmpeg")
@@ -94,26 +108,36 @@ def test_create_asr_pipeline_passes_float_mask_feature_prob(monkeypatch):
     torch_stub = sys.modules["torch"]
     monkeypatch.setattr(torch_stub.cuda, "is_available", lambda: True)
 
-    captured_config_kwargs = {}
+    captured_from_dict_args = {}
     captured_pipeline_kwargs = {}
 
-    def fake_from_pretrained(*args, **kwargs):
-        captured_config_kwargs.update(kwargs)
-        captured_config_kwargs["model_name"] = args[0] if args else None
+    # Simulate a config dict with mask_feature_prob as int (the bug scenario)
+    raw_config = {"model_type": "whisper", "mask_feature_prob": 0, "attention_dropout": 0}
+
+    def fake_get_config_dict(*args, **kwargs):
+        return dict(raw_config), {}
+
+    def fake_from_dict(config_dict, **kwargs):
+        captured_from_dict_args.update(config_dict)
         return "fake-config"
+
+    fake_config_class = types.SimpleNamespace(from_dict=fake_from_dict)
 
     def fake_pipeline(*args, **kwargs):
         captured_pipeline_kwargs.update(kwargs)
         return "fake-pipeline"
 
-    fake_auto_config = types.SimpleNamespace(from_pretrained=fake_from_pretrained)
-    monkeypatch.setattr(transcribe, "AutoConfig", fake_auto_config)
+    monkeypatch.setattr(transcribe, "PretrainedConfig",
+                        types.SimpleNamespace(get_config_dict=fake_get_config_dict))
+    monkeypatch.setattr(transcribe, "CONFIG_MAPPING", {"whisper": fake_config_class})
     monkeypatch.setattr(transcribe, "pipeline", fake_pipeline)
 
     result = transcribe.create_asr_pipeline()
 
     assert result == "fake-pipeline"
-    assert captured_config_kwargs["model_name"] == "NbAiLabBeta/nb-whisper-large"
-    assert captured_config_kwargs["mask_feature_prob"] == 0.0
-    assert isinstance(captured_config_kwargs["mask_feature_prob"], float)
+    # mask_feature_prob should be 0.0 (float), not 0 (int)
+    assert captured_from_dict_args["mask_feature_prob"] == 0.0
+    assert isinstance(captured_from_dict_args["mask_feature_prob"], float)
+    # attention_dropout should also be converted to float
+    assert isinstance(captured_from_dict_args["attention_dropout"], float)
     assert captured_pipeline_kwargs["config"] == "fake-config"

@@ -4,7 +4,9 @@ import subprocess
 import tempfile
 import torch
 import soundfile as sf
-from transformers import AutoConfig, pipeline
+from transformers import pipeline
+from transformers.configuration_utils import PretrainedConfig
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 
 MODEL_NAME = "NbAiLabBeta/nb-whisper-large"
 
@@ -24,9 +26,17 @@ def create_asr_pipeline(batch_size: int = 4):
         raise RuntimeError("Ingen CUDA‑enhet funnet. Sørg for at GPU‑drivere og CUDA er installert.")
 
     # Workaround: newer huggingface_hub versions enforce strict type validation
-    # on dataclass fields. The model config has mask_feature_prob=0 (int) but
-    # the field expects a float. Passing the value explicitly as 0.0 fixes it.
-    config = AutoConfig.from_pretrained(MODEL_NAME, mask_feature_prob=0.0)
+    # on dataclass fields. The model config JSON has integer 0 for fields that
+    # expect float (e.g. mask_feature_prob). AutoConfig.from_pretrained kwargs
+    # are applied AFTER the constructor, so we must fix the raw dict first.
+    config_dict, _ = PretrainedConfig.get_config_dict(MODEL_NAME)
+    for key in list(config_dict):
+        if isinstance(config_dict[key], int) and not isinstance(config_dict[key], bool):
+            if key.endswith(("_prob", "_dropout", "_rate", "_eps")):
+                config_dict[key] = float(config_dict[key])
+    config_dict["mask_feature_prob"] = 0.0
+    config_class = CONFIG_MAPPING[config_dict["model_type"]]
+    config = config_class.from_dict(config_dict)
 
     return pipeline(
         "automatic-speech-recognition",
