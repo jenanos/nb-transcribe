@@ -27,20 +27,6 @@ def _ensure_stubs():
     if not hasattr(tf_stub, "AutoConfig"):
         auto_config = types.SimpleNamespace(from_pretrained=lambda *a, **kw: None)
         tf_stub.AutoConfig = auto_config  # type: ignore[attr-defined]
-    # Stub sub-modules used by create_asr_pipeline
-    for sub in ("transformers.configuration_utils", "transformers.models",
-                "transformers.models.auto", "transformers.models.auto.configuration_auto"):
-        if sub not in sys.modules:
-            sys.modules[sub] = types.ModuleType(sub)
-    config_utils = sys.modules["transformers.configuration_utils"]
-    if not hasattr(config_utils, "PretrainedConfig"):
-        config_utils.PretrainedConfig = types.SimpleNamespace(  # type: ignore[attr-defined]
-            get_config_dict=lambda *a, **kw: ({}, {}),
-        )
-    auto_config_mod = sys.modules["transformers.models.auto.configuration_auto"]
-    if not hasattr(auto_config_mod, "CONFIG_MAPPING"):
-        fake_config_class = types.SimpleNamespace(from_dict=lambda *a, **kw: "fake-config")
-        auto_config_mod.CONFIG_MAPPING = {"whisper": fake_config_class}  # type: ignore[attr-defined]
 
 
 _ensure_stubs()
@@ -127,9 +113,18 @@ def test_create_asr_pipeline_fixes_int_to_float_in_config(monkeypatch):
         captured_pipeline_kwargs.update(kwargs)
         return "fake-pipeline"
 
-    monkeypatch.setattr(transcribe, "PretrainedConfig",
-                        types.SimpleNamespace(get_config_dict=fake_get_config_dict))
-    monkeypatch.setattr(transcribe, "CONFIG_MAPPING", {"whisper": fake_config_class})
+    # Stub the submodules that create_asr_pipeline imports locally
+    config_utils_stub = types.ModuleType("transformers.configuration_utils")
+    config_utils_stub.PretrainedConfig = types.SimpleNamespace(  # type: ignore[attr-defined]
+        get_config_dict=fake_get_config_dict,
+    )
+    auto_config_stub = types.ModuleType("transformers.models.auto.configuration_auto")
+    auto_config_stub.CONFIG_MAPPING = {"whisper": fake_config_class}  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "transformers.configuration_utils", config_utils_stub)
+    monkeypatch.setitem(sys.modules, "transformers.models", types.ModuleType("transformers.models"))
+    monkeypatch.setitem(sys.modules, "transformers.models.auto", types.ModuleType("transformers.models.auto"))
+    monkeypatch.setitem(sys.modules, "transformers.models.auto.configuration_auto", auto_config_stub)
     monkeypatch.setattr(transcribe, "pipeline", fake_pipeline)
 
     result = transcribe.create_asr_pipeline()
