@@ -85,74 +85,65 @@ def test_transcribe_segments_empty():
     assert result == ""
 
 
-def test_create_asr_pipeline_fixes_int_to_float_in_config(monkeypatch):
-    """Verify create_asr_pipeline converts int fields to float before instantiation."""
+def test_fix_cached_config_types_converts_int_to_float(tmp_path):
+    """Verify _fix_cached_config_types rewrites int→float for prob/dropout fields."""
+    import json
     import transcribe
 
-    monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/ffmpeg")
+    # Create a fake config.json with int values where float is expected
+    config_data = {
+        "model_type": "whisper",
+        "mask_feature_prob": 0,
+        "attention_dropout": 0,
+        "hidden_dropout": 0,
+        "vocab_size": 51865,
+        "use_cache": True,
+    }
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config_data))
 
-    torch_stub = sys.modules["torch"]
-    monkeypatch.setattr(torch_stub.cuda, "is_available", lambda: True)
+    # Stub hf_hub_download to return our temp file
+    hf_hub_stub = types.ModuleType("huggingface_hub")
+    hf_hub_stub.hf_hub_download = lambda *a, **kw: str(config_path)  # type: ignore[attr-defined]
 
-    captured_from_dict_args = {}
-    captured_pipeline_kwargs = {}
+    monkeypatch_mod = pytest.MonkeyPatch()
+    monkeypatch_mod.setitem(sys.modules, "huggingface_hub", hf_hub_stub)
+    try:
+        transcribe._fix_cached_config_types("fake-model")
+    finally:
+        monkeypatch_mod.undo()
 
-    # Simulate a config dict with mask_feature_prob as int (the bug scenario)
-    raw_config = {"model_type": "whisper", "mask_feature_prob": 0, "attention_dropout": 0}
+    fixed = json.loads(config_path.read_text())
+    # Float fields should be converted
+    assert isinstance(fixed["mask_feature_prob"], float)
+    assert fixed["mask_feature_prob"] == 0.0
+    assert isinstance(fixed["attention_dropout"], float)
+    assert isinstance(fixed["hidden_dropout"], float)
+    # Integer fields should stay as int
+    assert isinstance(fixed["vocab_size"], int)
+    # Bool fields should stay as bool
+    assert isinstance(fixed["use_cache"], bool)
 
-    def fake_get_config_dict(*args, **kwargs):
-        return dict(raw_config), {}
 
-    def fake_from_dict(config_dict, **kwargs):
-        captured_from_dict_args.update(config_dict)
-        return "fake-config"
+def test_fix_cached_config_types_no_rewrite_when_already_float(tmp_path):
+    """Verify _fix_cached_config_types does not rewrite if types are correct."""
+    import json
+    import transcribe
 
-    fake_config_class = types.SimpleNamespace(from_dict=fake_from_dict)
+    config_data = {"model_type": "whisper", "mask_feature_prob": 0.0}
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config_data))
+    mtime_before = config_path.stat().st_mtime
 
-    captured_model_kwargs = {}
+    hf_hub_stub = types.ModuleType("huggingface_hub")
+    hf_hub_stub.hf_hub_download = lambda *a, **kw: str(config_path)  # type: ignore[attr-defined]
 
-    def fake_from_pretrained(*args, **kwargs):
-        captured_model_kwargs.update(kwargs)
-        captured_model_kwargs["_args"] = args
-        return "fake-model"
+    monkeypatch_mod = pytest.MonkeyPatch()
+    monkeypatch_mod.setitem(sys.modules, "huggingface_hub", hf_hub_stub)
+    try:
+        transcribe._fix_cached_config_types("fake-model")
+    finally:
+        monkeypatch_mod.undo()
 
-    fake_processor = types.SimpleNamespace(
-        tokenizer="fake-tokenizer",
-        feature_extractor="fake-feature-extractor",
-    )
-
-    def fake_pipeline(*args, **kwargs):
-        captured_pipeline_kwargs.update(kwargs)
-        return "fake-pipeline"
-
-    # Stub the submodules that create_asr_pipeline imports locally
-    config_utils_stub = types.ModuleType("transformers.configuration_utils")
-    config_utils_stub.PretrainedConfig = types.SimpleNamespace(  # type: ignore[attr-defined]
-        get_config_dict=fake_get_config_dict,
-    )
-    auto_config_stub = types.ModuleType("transformers.models.auto.configuration_auto")
-    auto_config_stub.CONFIG_MAPPING = {"whisper": fake_config_class}  # type: ignore[attr-defined]
-
-    tf_stub = sys.modules["transformers"]
-    tf_stub.AutoModelForSpeechSeq2Seq = types.SimpleNamespace(from_pretrained=fake_from_pretrained)  # type: ignore[attr-defined]
-    tf_stub.AutoProcessor = types.SimpleNamespace(from_pretrained=lambda *a, **kw: fake_processor)  # type: ignore[attr-defined]
-
-    monkeypatch.setitem(sys.modules, "transformers.configuration_utils", config_utils_stub)
-    monkeypatch.setitem(sys.modules, "transformers.models", types.ModuleType("transformers.models"))
-    monkeypatch.setitem(sys.modules, "transformers.models.auto", types.ModuleType("transformers.models.auto"))
-    monkeypatch.setitem(sys.modules, "transformers.models.auto.configuration_auto", auto_config_stub)
-    monkeypatch.setattr(transcribe, "pipeline", fake_pipeline)
-
-    result = transcribe.create_asr_pipeline()
-
-    assert result == "fake-pipeline"
-    # mask_feature_prob should be 0.0 (float), not 0 (int)
-    assert captured_from_dict_args["mask_feature_prob"] == 0.0
-    assert isinstance(captured_from_dict_args["mask_feature_prob"], float)
-    # attention_dropout should also be converted to float
-    assert isinstance(captured_from_dict_args["attention_dropout"], float)
-    # Model should be loaded with fixed config and correct dtype
-    assert captured_model_kwargs["config"] == "fake-config"
-    assert captured_model_kwargs["torch_dtype"] == "float16"
-    # Model object should be passed to pipeline, not the model name string
-    assert captured_pipeline_kwargs["model"] == "fake-model"
+    # File should not have been rewritten
+    assert config_path.stat().st_mtime == mtime_before
