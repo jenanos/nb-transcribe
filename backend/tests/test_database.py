@@ -61,6 +61,17 @@ def test_setup_database_retries_until_db_is_ready(clean_database, monkeypatch, t
     assert clean_database.is_database_configured()
 
 
+def test_setup_database_tolerates_invalid_retry_env(clean_database, monkeypatch, tmp_path):
+    """Feilformaterte retry-variabler skal ikke krasje oppstarten."""
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/badenv.db")
+    monkeypatch.setenv("DATABASE_CONNECT_RETRIES", "ikke-et-tall")
+    monkeypatch.setenv("DATABASE_CONNECT_RETRY_DELAY", "-3")
+
+    clean_database.setup_database()  # skal ikke kaste
+
+    assert clean_database.is_database_configured()
+
+
 def test_save_get_and_list_roundtrip(clean_database, monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/roundtrip.db")
     clean_database.setup_database()

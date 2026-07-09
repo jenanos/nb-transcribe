@@ -166,6 +166,8 @@ async def process(
         )
     except Exception as exc:
         logger.exception("Synkron jobb %s feilet", job_id)
+        with contextlib.suppress(OSError):
+            os.remove(tmp_path)
         save_transcription_record(
             job_id=job_id,
             raw_text=None,

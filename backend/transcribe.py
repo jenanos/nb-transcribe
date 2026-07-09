@@ -86,11 +86,16 @@ def to_wav(input_path: str, sampling_rate: int = 16000) -> str:
     ensure_ffmpeg()
     fd, wav_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
-    result = subprocess.run([
-        os.environ["FFMPEG_BINARY"],
-        "-y", "-i", input_path,
-        "-ar", str(sampling_rate), "-ac", "1", wav_path
-    ], capture_output=True)
+    try:
+        result = subprocess.run([
+            os.environ["FFMPEG_BINARY"],
+            "-y", "-i", input_path,
+            "-ar", str(sampling_rate), "-ac", "1", wav_path
+        ], capture_output=True)
+    except OSError as exc:
+        with contextlib.suppress(OSError):
+            os.remove(wav_path)
+        raise RuntimeError(f"Kunne ikke starte ffmpeg: {exc}") from exc
     if result.returncode != 0:
         with contextlib.suppress(OSError):
             os.remove(wav_path)

@@ -43,6 +43,19 @@ _ENGINE = None
 _SESSION_FACTORY: Optional[sessionmaker[Session]] = None
 
 
+def _read_env_number(name: str, *, default, minimum, cast):
+    """Leser et tall fra miljøet; faller tilbake til default ved ugyldig verdi."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = cast(raw)
+    except ValueError:
+        logger.warning("Ugyldig verdi for %s (%r); bruker %s", name, raw, default)
+        return default
+    return max(minimum, value)
+
+
 def setup_database() -> None:
     """Initialises the database connection and creates tables when configured.
 
@@ -61,8 +74,8 @@ def setup_database() -> None:
         logger.info("DATABASE_URL not set; skipping database initialisation.")
         return
 
-    retries = max(1, int(os.environ.get("DATABASE_CONNECT_RETRIES", "5")))
-    retry_delay = float(os.environ.get("DATABASE_CONNECT_RETRY_DELAY", "2"))
+    retries = _read_env_number("DATABASE_CONNECT_RETRIES", default=5, minimum=1, cast=int)
+    retry_delay = _read_env_number("DATABASE_CONNECT_RETRY_DELAY", default=2.0, minimum=0.0, cast=float)
 
     engine = create_engine(database_url)
     for attempt in range(1, retries + 1):
@@ -75,6 +88,7 @@ def setup_database() -> None:
                     retries,
                     exc,
                 )
+                engine.dispose()
                 return
             logger.warning(
                 "Database not ready (attempt %d/%d), retrying in %.1fs: %s",
