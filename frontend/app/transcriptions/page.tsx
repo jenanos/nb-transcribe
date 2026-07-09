@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import bgImage from "@/public/nb-transcribe-background.png";
 
 interface TranscriptionRecord {
@@ -50,13 +49,16 @@ export default function TranscriptionsPage() {
     const fetchData = async () => {
       try {
         const res = await fetch("/api/transcriptions", { cache: "no-store" });
-        const body = await res.json();
+        const body = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error(body?.error || "Kunne ikke hente transkripsjoner");
+          throw new Error(body?.error || `Kunne ikke hente transkripsjoner (${res.status})`);
+        }
+        if (!body) {
+          throw new Error("Kunne ikke tolke svar fra serveren.");
         }
         setRecords(body.items ?? []);
-      } catch (err: any) {
-        setError(err?.message || "Ukjent feil");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Ukjent feil");
       } finally {
         setLoading(false);
       }
@@ -86,6 +88,17 @@ export default function TranscriptionsPage() {
   };
 
   const closeModal = () => setModalContent(null);
+
+  useEffect(() => {
+    if (!modalContent) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeModal();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [modalContent]);
 
   return (
     <div className="relative min-h-screen text-white">
@@ -188,8 +201,9 @@ export default function TranscriptionsPage() {
                         onClick={() => handleCopy(`${record.job_id}-raw`, record.raw_transcript)}
                         className="flex items-center justify-center rounded border border-cyan-300/50 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-500/20"
                         title="Kopier råtranskripsjon"
+                        aria-label="Kopier råtranskripsjon"
                       >
-                        <span className="material-icons text-sm leading-none">content_copy</span>
+                        <span className="material-icons text-sm leading-none" aria-hidden="true">content_copy</span>
                       </button>
                     )}
                     {copiedLabel === `${record.job_id}-raw` && (
@@ -212,8 +226,17 @@ export default function TranscriptionsPage() {
         </div>
 
         {modalContent && (
-          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 py-8">
-            <div className="relative w-full max-w-4xl rounded-2xl border border-cyan-400/50 bg-black/90 p-6 shadow-[0_0_30px_#00e5ff]">
+          <div
+            className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4 py-8"
+            onClick={closeModal}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={modalContent.title}
+              onClick={(event) => event.stopPropagation()}
+              className="relative w-full max-w-4xl rounded-2xl border border-cyan-400/50 bg-black/90 p-6 shadow-[0_0_30px_#00e5ff]"
+            >
               <div className="mb-4 flex items-start justify-between gap-4">
                 <h3 className="font-orbitron text-xl text-cyan-200">{modalContent.title}</h3>
                 <div className="flex gap-2">
@@ -224,7 +247,7 @@ export default function TranscriptionsPage() {
                       className="flex items-center justify-center gap-1 rounded border border-cyan-300/60 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/20"
                       title="Kopier tekst"
                     >
-                      <span className="material-icons text-sm">content_copy</span>
+                      <span className="material-icons text-sm" aria-hidden="true">content_copy</span>
                       Kopier
                     </button>
                   )}
@@ -234,7 +257,7 @@ export default function TranscriptionsPage() {
                     className="flex items-center justify-center gap-1 rounded border border-white/20 bg-white/5 px-3 py-1 text-xs font-medium text-gray-100 transition hover:bg-white/10"
                     title="Lukk"
                   >
-                    <span className="material-icons text-sm">close</span>
+                    <span className="material-icons text-sm" aria-hidden="true">close</span>
                     Lukk
                   </button>
                 </div>

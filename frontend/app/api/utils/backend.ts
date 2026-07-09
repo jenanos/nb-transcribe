@@ -1,5 +1,9 @@
 import { getCloudflareAccessHeaders } from "./cloudflare";
 
+// Node/undici krever duplex: "half" for streaming request bodies,
+// men DOM-typene til fetch kjenner ikke til feltet.
+export type StreamingRequestInit = RequestInit & { duplex: "half" };
+
 export const BACKEND_BASE_URL =
   process.env.BACKEND_URL ??
   process.env.NEXT_PUBLIC_BACKEND_URL ??

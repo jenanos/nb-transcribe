@@ -7,7 +7,7 @@ export default function ProcessingAnimation() {
             <div className="relative h-24 w-24">
                 <div className="absolute inset-0 animate-ping rounded-full bg-pink-500 opacity-20"></div>
                 <div className="absolute inset-0 flex items-center justify-center rounded-full bg-gradient-to-b from-pink-500 to-purple-600 shadow-[0_0_30px_#ff00ff]">
-                    <span className="material-icons animate-pulse text-4xl text-white">graphic_eq</span>
+                    <span className="material-icons animate-pulse text-4xl text-white" aria-hidden="true">graphic_eq</span>
                 </div>
             </div>
 

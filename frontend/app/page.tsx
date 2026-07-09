@@ -13,6 +13,7 @@ const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 const CHUNKED_UPLOAD_THRESHOLD = 1 * 1024 * 1024; // 1 MB – bruk chunked upload tidlig for å unngå 502 via proxy
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
 const POLL_MAX_RETRIES = 20;
+const CHUNK_MAX_RETRIES = 3;
 
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =
@@ -29,6 +30,7 @@ export default function Home() {
   const [jobStatusBaseUrl, setJobStatusBaseUrl] = useState<string | null>(null);
   const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
   const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearPollTimeout = () => {
@@ -77,13 +79,29 @@ export default function Home() {
       const chunkForm = new FormData();
       chunkForm.append("file", chunk, file.name);
 
-      const appendRes = await fetch(
-        `${baseUrl}/chunked/${upload_id}/append`,
-        { method: "POST", body: chunkForm, credentials: "include" }
-      );
-      if (!appendRes.ok) {
-        const t = await appendRes.text();
-        throw new Error(`${appendRes.status} ${appendRes.statusText} – ${t}`);
+      let attempt = 0;
+      while (true) {
+        try {
+          const appendRes = await fetch(
+            `${baseUrl}/chunked/${upload_id}/append`,
+            { method: "POST", body: chunkForm, credentials: "include" }
+          );
+          if (appendRes.ok) {
+            break;
+          }
+          const isTransient = [502, 503, 504].includes(appendRes.status);
+          if (!isTransient || attempt >= CHUNK_MAX_RETRIES) {
+            const t = await appendRes.text();
+            throw new Error(`${appendRes.status} ${appendRes.statusText} – ${t}`);
+          }
+        } catch (err) {
+          const isNetworkError = err instanceof TypeError;
+          if (!isNetworkError || attempt >= CHUNK_MAX_RETRIES) {
+            throw err;
+          }
+        }
+        attempt++;
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
       }
       offset = end;
     }
@@ -145,8 +163,8 @@ export default function Home() {
 
       setActiveJobId(job_id);
       setJobStatusBaseUrl(jobEndpointBase);
-    } catch (err: any) {
-      setError(err.message || "Ukjent feil");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ukjent feil");
       setLoading(false);
       setFlowState("idle");
       setActiveJobId(null);
@@ -173,12 +191,17 @@ export default function Home() {
         const res = await fetch(`${pollBase}/${activeJobId}`, { cache: "no-store", credentials: "include" });
 
         const text = await res.text().catch(() => "");
-        let data: any = null;
+        let data: {
+          status?: string;
+          result?: { raw?: string };
+          error?: string;
+          detail?: string;
+        } | null = null;
 
         if (text) {
           try {
             data = JSON.parse(text);
-          } catch (parseError) {
+          } catch {
             if (res.ok) {
               throw new Error("Kunne ikke tolke svar fra serveren.");
             }
@@ -222,7 +245,7 @@ export default function Home() {
 
         // Fortsett å polle
         pollTimeoutRef.current = setTimeout(poll, 2000);
-      } catch (err: any) {
+      } catch (err) {
         if (cancelled) return;
         const isNetworkError = err instanceof TypeError;
         if (isNetworkError && consecutiveErrors < POLL_MAX_RETRIES) {
@@ -230,7 +253,7 @@ export default function Home() {
           pollTimeoutRef.current = setTimeout(poll, 2000 * consecutiveErrors);
           return;
         }
-        setError(err?.message || "Ukjent feil");
+        setError(err instanceof Error ? err.message : "Ukjent feil");
         setLoading(false);
         setFlowState("idle");
         setActiveJobId(null);
@@ -273,8 +296,13 @@ export default function Home() {
 
       {showMockInfo && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4">
-          <div className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]">
-            <h3 className="font-orbitron text-2xl text-cyan-300 mb-3">Mock-modus aktivert</h3>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mock-info-title"
+            className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]"
+          >
+            <h3 id="mock-info-title" className="font-orbitron text-2xl text-cyan-300 mb-3">Mock-modus aktivert</h3>
             <p className="mb-3 text-sm text-gray-200">
               Denne forhåndsvisningen kjører kun den synlige frontenden og simulerer svar fra backenden.
               I produksjon er backenden selvhostet med NB-Whisper Large på GPU, men den holdes privat slik
@@ -288,7 +316,7 @@ export default function Home() {
               onClick={() => setShowMockInfo(false)}
               className="rounded-lg bg-pink-500 px-4 py-2 font-bold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
             >
-              Got it!
+              Skjønner!
             </button>
           </div>
         </div>
@@ -296,8 +324,13 @@ export default function Home() {
 
       {showMockUploadNotice && (
         <div className="fixed inset-0 z-30 flex items-start justify-center pointer-events-none">
-          <div className="mt-24 w-full max-w-md rounded-xl border border-cyan-400 bg-black/90 p-5 text-sm text-gray-100 shadow-[0_0_15px_#00e5ff] pointer-events-auto">
-            <h4 className="font-orbitron text-lg text-cyan-300 mb-2">Filopplasting deaktivert i mock-modus</h4>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mock-upload-title"
+            className="mt-24 w-full max-w-md rounded-xl border border-cyan-400 bg-black/90 p-5 text-sm text-gray-100 shadow-[0_0_15px_#00e5ff] pointer-events-auto"
+          >
+            <h4 id="mock-upload-title" className="font-orbitron text-lg text-cyan-300 mb-2">Filopplasting deaktivert i mock-modus</h4>
             <p className="mb-3 text-gray-200">
               Opplasting av egne filer er skrudd av her. Vi har forhåndslastet et eksempelklipp slik at du kan se
               transkriberingsflyten uten backend-tilgang.
@@ -306,7 +339,7 @@ export default function Home() {
               onClick={() => setShowMockUploadNotice(false)}
               className="rounded-lg bg-pink-500 px-3 py-2 font-semibold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
             >
-              Understood
+              Skjønner
             </button>
           </div>
         </div>
@@ -348,10 +381,33 @@ export default function Home() {
                     setShowMockUploadNotice(true);
                   }
                 }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (!MOCK_MODE && flowState !== "processing") {
+                    setDragActive(true);
+                  }
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragActive(false);
+                  if (MOCK_MODE) {
+                    setShowMockUploadNotice(true);
+                    return;
+                  }
+                  if (flowState === "processing") {
+                    return;
+                  }
+                  const dropped = event.dataTransfer.files?.[0];
+                  if (dropped) {
+                    setFile(dropped);
+                  }
+                }}
                 tabIndex={MOCK_MODE ? 0 : undefined}
                 role={MOCK_MODE ? "button" : undefined}
                 aria-disabled={MOCK_MODE ? "true" : "false"}
-                className="mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed border-pink-400 rounded-md cursor-pointer hover:border-cyan-400 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                className={`mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed rounded-md cursor-pointer hover:border-cyan-400 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400 ${dragActive ? "border-cyan-400 bg-cyan-500/10" : "border-pink-400"
+                  }`}
               >
                 <span className="text-center text-pink-400">
                   {file ? file.name : "Klikk for å velge fil eller dra og slipp"}
@@ -403,7 +459,7 @@ export default function Home() {
                 onClick={handleReset}
                 className="flex items-center space-x-2 rounded-lg border border-cyan-400/50 bg-cyan-500/10 px-6 py-3 text-cyan-100 hover:bg-cyan-500/20 transition"
               >
-                <span className="material-icons">refresh</span>
+                <span className="material-icons" aria-hidden="true">refresh</span>
                 <span>Ny transkribering</span>
               </button>
             </div>

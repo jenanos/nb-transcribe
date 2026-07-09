@@ -36,11 +36,6 @@ export default function RootLayout({
     <html lang="no">
       <head>
         <meta name="theme-color" content="#050816" />
-        <link
-          href="https://fonts.googleapis.com/icon?family=Material+Icons"
-          rel="stylesheet"
-        />
-        <link rel="manifest" href="/manifest.json" />
         <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
       </head>

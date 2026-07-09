@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const jsonResponse = (payload: any, status = 200) =>
+const jsonResponse = (payload: unknown, status = 200) =>
   ({
     ok: status >= 200 && status < 300,
     status,

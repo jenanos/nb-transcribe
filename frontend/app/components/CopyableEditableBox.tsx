@@ -49,18 +49,20 @@ export default function CopyableEditableBox({
             onClick={handleCopy}
             className="text-cyan-300 hover:text-white transition-colors"
             title="Kopier"
+            aria-label="Kopier tekst"
             type="button"
           >
-            📋
+            <span aria-hidden="true">📋</span>
           </button>
           {!isEditing && (
             <button
               onClick={() => setIsEditing(true)}
               className="text-cyan-300 hover:text-white transition-colors"
               title="Rediger"
+              aria-label="Rediger tekst"
               type="button"
             >
-              ✏️
+              <span aria-hidden="true">✏️</span>
             </button>
           )}
         </div>
