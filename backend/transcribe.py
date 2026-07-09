@@ -86,11 +86,19 @@ def to_wav(input_path: str, sampling_rate: int = 16000) -> str:
     ensure_ffmpeg()
     fd, wav_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
-    subprocess.run([
+    result = subprocess.run([
         os.environ["FFMPEG_BINARY"],
         "-y", "-i", input_path,
         "-ar", str(sampling_rate), "-ac", "1", wav_path
-    ], check=True, capture_output=True)
+    ], capture_output=True)
+    if result.returncode != 0:
+        with contextlib.suppress(OSError):
+            os.remove(wav_path)
+        stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+        stderr_tail = "\n".join(stderr.splitlines()[-5:])
+        raise RuntimeError(
+            f"ffmpeg klarte ikke å konvertere lydfilen (exit {result.returncode}): {stderr_tail}"
+        )
     return wav_path
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -43,7 +44,13 @@ _SESSION_FACTORY: Optional[sessionmaker[Session]] = None
 
 
 def setup_database() -> None:
-    """Initialises the database connection and creates tables when configured."""
+    """Initialises the database connection and creates tables when configured.
+
+    Retries a few times so the backend survives losing the startup race
+    against Postgres (docker-compose ``depends_on`` does not wait for the
+    database to accept connections). If the database stays unreachable the
+    app continues without persistence instead of crashing.
+    """
 
     global _ENGINE, _SESSION_FACTORY
     if _ENGINE is not None:
@@ -54,17 +61,34 @@ def setup_database() -> None:
         logger.info("DATABASE_URL not set; skipping database initialisation.")
         return
 
-    _ENGINE = create_engine(database_url)
-    _SESSION_FACTORY = sessionmaker(bind=_ENGINE, expire_on_commit=False)
+    retries = max(1, int(os.environ.get("DATABASE_CONNECT_RETRIES", "5")))
+    retry_delay = float(os.environ.get("DATABASE_CONNECT_RETRY_DELAY", "2"))
 
-    try:
-        Base.metadata.create_all(_ENGINE)
-        logger.info("Database initialised and tables ready.")
-    except SQLAlchemyError as exc:  # pragma: no cover - defensive logging
-        logger.error("Failed to create tables: %s", exc)
-        _ENGINE = None
-        _SESSION_FACTORY = None
-        raise
+    engine = create_engine(database_url)
+    for attempt in range(1, retries + 1):
+        try:
+            Base.metadata.create_all(engine)
+        except SQLAlchemyError as exc:
+            if attempt == retries:
+                logger.error(
+                    "Database unavailable after %d attempts; continuing without persistence: %s",
+                    retries,
+                    exc,
+                )
+                return
+            logger.warning(
+                "Database not ready (attempt %d/%d), retrying in %.1fs: %s",
+                attempt,
+                retries,
+                retry_delay,
+                exc,
+            )
+            time.sleep(retry_delay)
+        else:
+            _ENGINE = engine
+            _SESSION_FACTORY = sessionmaker(bind=engine, expire_on_commit=False)
+            logger.info("Database initialised and tables ready.")
+            return
 
 
 def is_database_configured() -> bool:
