@@ -33,10 +33,11 @@ export default function Navbar() {
 
         <button
           className="md:hidden rounded-md border border-white/10 bg-white/5 p-2 hover:bg-white/10"
-          aria-label="Toggle navigation"
+          aria-label={open ? "Lukk meny" : "Åpne meny"}
+          aria-expanded={open}
           onClick={() => setOpen((prev) => !prev)}
         >
-          <span className="material-icons text-2xl">{open ? "close" : "menu"}</span>
+          <span className="material-icons text-2xl" aria-hidden="true">{open ? "close" : "menu"}</span>
         </button>
 
         <nav className="hidden items-center space-x-4 md:flex">
@@ -54,7 +55,7 @@ export default function Navbar() {
                   : "text-gray-200 hover:text-white hover:bg-white/5"
                   }`}
               >
-                <span className="material-icons text-lg">{link.icon}</span>
+                <span className="material-icons text-lg" aria-hidden="true">{link.icon}</span>
                 <span>{link.label}</span>
               </Link>
             );
@@ -79,7 +80,7 @@ export default function Navbar() {
                     : "text-gray-200 hover:text-white hover:bg-white/5"
                     }`}
                 >
-                  <span className="material-icons text-lg">{link.icon}</span>
+                  <span className="material-icons text-lg" aria-hidden="true">{link.icon}</span>
                   <span>{link.label}</span>
                 </Link>
               );

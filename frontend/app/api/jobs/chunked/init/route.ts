@@ -28,9 +28,9 @@ export async function POST(req: Request) {
       headers: withCloudflareAccessHeaders({}),
     });
     return await forwardResponse(upstream);
-  } catch (err: any) {
+  } catch (err) {
     return new Response(
-      JSON.stringify({ error: err?.message ?? "Proxy failure" }),
+      JSON.stringify({ error: err instanceof Error ? err.message : "Proxy failure" }),
       { status: 502, headers: { "content-type": "application/json" } }
     );
   }

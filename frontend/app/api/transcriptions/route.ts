@@ -43,8 +43,8 @@ export async function GET(req: Request) {
     });
 
     return await forwardResponse(upstream);
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err?.message ?? "Proxy failure" }), {
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Proxy failure" }), {
       status: 502,
       headers: { "content-type": "application/json" },
     });

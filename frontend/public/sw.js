@@ -1,4 +1,4 @@
-const CACHE_NAME = "nb-transcribe-shell-v1";
+const CACHE_NAME = "nb-transcribe-shell-v2";
 const APP_SHELL = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -25,26 +25,38 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const cachePut = (request, response) => {
+    if (response && response.status === 200 && response.type === "basic") {
+      const responseClone = response.clone();
+      // waitUntil holder service workeren i live til cache-skrivingen er ferdig
+      event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone))
+      );
+    }
+    return response;
+  };
+
+  // Nettverk først for sidenavigasjoner slik at nye deploys når brukeren;
+  // cache brukes bare som offline-fallback.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => cachePut(event.request, response))
+        .catch(() =>
+          caches.match(event.request).then((cached) => cached || caches.match("/"))
+        )
+    );
+    return;
+  }
+
+  // Cache først for statiske ressurser (hashet av Next.js, trygt å cache).
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) {
         return cached;
       }
 
-      return fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200 && response.type === "basic") {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-          }
-          return response;
-        })
-        .catch((error) => {
-          if (event.request.mode === "navigate") {
-            return caches.match("/");
-          }
-          return Promise.reject(error);
-        });
+      return fetch(event.request).then((response) => cachePut(event.request, response));
     })
   );
 });
