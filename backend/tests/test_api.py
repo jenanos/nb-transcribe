@@ -93,6 +93,98 @@ async def test_process_endpoint_transcribes(patched_main):
     assert payload["metadata"]["original_filename"] == "test.wav"
 
 
+@pytest.mark.asyncio
+async def test_process_endpoint_returns_json_error_on_failure(patched_main, monkeypatch):
+    def failing_pipeline(*_args, **_kwargs):
+        raise RuntimeError("pipeline exploded")
+
+    monkeypatch.setattr(patched_main, "run_transcribe_pipeline", failing_pipeline)
+
+    upload = UploadFile(filename="test.wav", file=io.BytesIO(b"fake-bytes"))
+    response = await patched_main.process(upload)
+    await upload.close()
+
+    assert response.status_code == 500
+    payload = json.loads(response.body.decode())
+    assert "pipeline exploded" in payload["error"]
+    assert "job_id" in payload
+
+
+def test_cleanup_jobs_keeps_recently_finished_job(patched_main):
+    """En jobb som var lenge i kø, men nettopp ble ferdig, skal ikke slettes."""
+    now = time.time()
+    patched_main.JOBS["slow-job"] = {
+        "status": "done",
+        "result": {"raw": "tekst"},
+        "error": None,
+        "created_at": now - patched_main.JOB_TTL_SECONDS * 3,
+        "finished_at": now,
+    }
+
+    patched_main.cleanup_jobs(now)
+
+    assert "slow-job" in patched_main.JOBS
+
+
+def test_cleanup_jobs_removes_job_finished_long_ago(patched_main):
+    now = time.time()
+    patched_main.JOBS["old-job"] = {
+        "status": "done",
+        "result": {"raw": "tekst"},
+        "error": None,
+        "created_at": now - patched_main.JOB_TTL_SECONDS * 3,
+        "finished_at": now - patched_main.JOB_TTL_SECONDS - 10,
+    }
+    patched_main.JOBS["running-job"] = {
+        "status": "running",
+        "result": None,
+        "error": None,
+        "created_at": now - patched_main.JOB_TTL_SECONDS * 3,
+    }
+
+    patched_main.cleanup_jobs(now)
+
+    assert "old-job" not in patched_main.JOBS
+    assert "running-job" in patched_main.JOBS
+
+
+@pytest.mark.asyncio
+async def test_get_job_hides_traceback_by_default(patched_main):
+    patched_main.JOBS["failed-job"] = {
+        "status": "error",
+        "result": None,
+        "error": "boom",
+        "error_detail": "Traceback (most recent call last): ...",
+        "created_at": time.time(),
+        "finished_at": time.time(),
+    }
+
+    response = await patched_main.get_job("failed-job")
+    payload = json.loads(response.body.decode())
+
+    assert response.status_code == 500
+    assert payload["error"] == "boom"
+    assert "detail" not in payload
+
+
+@pytest.mark.asyncio
+async def test_get_job_exposes_traceback_when_enabled(patched_main, monkeypatch):
+    monkeypatch.setattr(patched_main, "EXPOSE_ERROR_DETAILS", True)
+    patched_main.JOBS["failed-job"] = {
+        "status": "error",
+        "result": None,
+        "error": "boom",
+        "error_detail": "Traceback (most recent call last): ...",
+        "created_at": time.time(),
+        "finished_at": time.time(),
+    }
+
+    response = await patched_main.get_job("failed-job")
+    payload = json.loads(response.body.decode())
+
+    assert payload["detail"].startswith("Traceback")
+
+
 def test_submit_job_handles_error(tmp_path: Path, patched_main, monkeypatch):
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"fake")
@@ -115,3 +207,4 @@ def test_submit_job_handles_error(tmp_path: Path, patched_main, monkeypatch):
     job = patched_main.JOBS[job_id]
     assert job["status"] == "error"
     assert "boom" in job["error"]
+    assert "finished_at" in job

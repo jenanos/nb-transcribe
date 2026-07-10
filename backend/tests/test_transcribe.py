@@ -149,6 +149,52 @@ def test_fix_cached_config_types_no_rewrite_when_already_float(tmp_path):
     assert config_path.read_text() == original_content
 
 
+def test_to_wav_error_includes_ffmpeg_stderr(monkeypatch, tmp_path):
+    """En feilende ffmpeg-konvertering skal gi en feilmelding med stderr-utdrag."""
+    import transcribe
+
+    monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/ffmpeg")
+
+    def fake_run(*_args, **_kwargs):
+        return types.SimpleNamespace(
+            returncode=1,
+            stdout=b"",
+            stderr=b"header line\nInvalid data found when processing input",
+        )
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        transcribe.to_wav(str(tmp_path / "input.m4a"))
+
+    message = str(exc_info.value)
+    assert "Invalid data found" in message
+    assert "exit 1" in message
+
+
+def test_to_wav_cleans_up_when_ffmpeg_cannot_start(monkeypatch, tmp_path):
+    import glob
+    import tempfile
+    import transcribe
+
+    monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/ffmpeg")
+
+    def raising_run(*_args, **_kwargs):
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr("subprocess.run", raising_run)
+
+    original_mkstemp = tempfile.mkstemp
+    monkeypatch.setattr(
+        "tempfile.mkstemp", lambda **kw: original_mkstemp(dir=str(tmp_path), **kw)
+    )
+
+    with pytest.raises(RuntimeError, match="Kunne ikke starte ffmpeg"):
+        transcribe.to_wav(str(tmp_path / "input.m4a"))
+
+    assert glob.glob(str(tmp_path / "*.wav")) == []
+
+
 def test_create_asr_pipeline_calls_fix_and_pipeline(monkeypatch):
     """Verify create_asr_pipeline calls _fix_cached_config_types then pipeline."""
     import transcribe

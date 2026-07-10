@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -42,8 +43,27 @@ _ENGINE = None
 _SESSION_FACTORY: Optional[sessionmaker[Session]] = None
 
 
+def _read_env_number(name: str, *, default, minimum, cast):
+    """Leser et tall fra miljøet; faller tilbake til default ved ugyldig verdi."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = cast(raw)
+    except ValueError:
+        logger.warning("Ugyldig verdi for %s (%r); bruker %s", name, raw, default)
+        return default
+    return max(minimum, value)
+
+
 def setup_database() -> None:
-    """Initialises the database connection and creates tables when configured."""
+    """Initialises the database connection and creates tables when configured.
+
+    Retries a few times so the backend survives losing the startup race
+    against Postgres (docker-compose ``depends_on`` does not wait for the
+    database to accept connections). If the database stays unreachable the
+    app continues without persistence instead of crashing.
+    """
 
     global _ENGINE, _SESSION_FACTORY
     if _ENGINE is not None:
@@ -54,17 +74,35 @@ def setup_database() -> None:
         logger.info("DATABASE_URL not set; skipping database initialisation.")
         return
 
-    _ENGINE = create_engine(database_url)
-    _SESSION_FACTORY = sessionmaker(bind=_ENGINE, expire_on_commit=False)
+    retries = _read_env_number("DATABASE_CONNECT_RETRIES", default=5, minimum=1, cast=int)
+    retry_delay = _read_env_number("DATABASE_CONNECT_RETRY_DELAY", default=2.0, minimum=0.0, cast=float)
 
-    try:
-        Base.metadata.create_all(_ENGINE)
-        logger.info("Database initialised and tables ready.")
-    except SQLAlchemyError as exc:  # pragma: no cover - defensive logging
-        logger.error("Failed to create tables: %s", exc)
-        _ENGINE = None
-        _SESSION_FACTORY = None
-        raise
+    engine = create_engine(database_url)
+    for attempt in range(1, retries + 1):
+        try:
+            Base.metadata.create_all(engine)
+        except SQLAlchemyError as exc:
+            if attempt == retries:
+                logger.error(
+                    "Database unavailable after %d attempts; continuing without persistence: %s",
+                    retries,
+                    exc,
+                )
+                engine.dispose()
+                return
+            logger.warning(
+                "Database not ready (attempt %d/%d), retrying in %.1fs: %s",
+                attempt,
+                retries,
+                retry_delay,
+                exc,
+            )
+            time.sleep(retry_delay)
+        else:
+            _ENGINE = engine
+            _SESSION_FACTORY = sessionmaker(bind=engine, expire_on_commit=False)
+            logger.info("Database initialised and tables ready.")
+            return
 
 
 def is_database_configured() -> bool:

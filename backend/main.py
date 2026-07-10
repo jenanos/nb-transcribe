@@ -59,8 +59,12 @@ app.add_middleware(
 
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
-JOB_TTL_SECONDS = 60 * 5  # behold ferdige jobber i minnet i 5 minutter (fallback til DB)
+JOB_TTL_SECONDS = 60 * 5  # behold ferdige jobber i minnet i 5 minutter etter fullføring (fallback til DB)
 CHUNKED_UPLOAD_TTL = 60 * 30  # opplastinger utløper etter 30 minutter
+
+# Full traceback i API-responser er nyttig lokalt, men lekker interne detaljer
+# i produksjon. Slås på eksplisitt med EXPOSE_ERROR_DETAILS=1.
+EXPOSE_ERROR_DETAILS = os.environ.get("EXPOSE_ERROR_DETAILS", "").lower() in {"1", "true", "yes"}
 
 
 async def persist_upload(upload: UploadFile) -> str:
@@ -81,7 +85,7 @@ def cleanup_jobs(now: Optional[float] = None) -> None:
         job_id
         for job_id, job in list(JOBS.items())
         if job.get("status") in {"done", "error"}
-        and timestamp - job.get("created_at", timestamp) > JOB_TTL_SECONDS
+        and timestamp - job.get("finished_at", job.get("created_at", timestamp)) > JOB_TTL_SECONDS
     ]
     for job_id in expired_ids:
         JOBS.pop(job_id, None)
@@ -156,9 +160,22 @@ async def process(
 
     job_id = str(uuid4())
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        executor, run_transcribe_pipeline, tmp_path, job_id, original_filename
-    )
+    try:
+        result = await loop.run_in_executor(
+            executor, run_transcribe_pipeline, tmp_path, job_id, original_filename
+        )
+    except Exception as exc:
+        logger.exception("Synkron jobb %s feilet", job_id)
+        with contextlib.suppress(OSError):
+            os.remove(tmp_path)
+        save_transcription_record(
+            job_id=job_id,
+            raw_text=None,
+            metadata={"original_filename": original_filename},
+            status="error",
+            error_message=str(exc),
+        )
+        return JSONResponse({"job_id": job_id, "error": str(exc)}, status_code=500)
 
     metadata = result.get("metadata") or {}
 
@@ -192,6 +209,7 @@ def _submit_job(
         result = run_transcribe_pipeline(file_path, job_id, original_filename=original_filename)
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["result"] = result
+        JOBS[job_id]["finished_at"] = time.time()
         metadata_for_db = result.get("metadata", metadata_for_db)
         save_transcription_record(
             job_id=job_id,
@@ -205,6 +223,7 @@ def _submit_job(
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"] = error_message
         JOBS[job_id]["error_detail"] = error_traceback
+        JOBS[job_id]["finished_at"] = time.time()
         logger.exception("Job %s feilet", job_id)
         save_transcription_record(
             job_id=job_id,
@@ -249,7 +268,7 @@ async def get_job(job_id: str):
             return JSONResponse({"status": "done", "result": job["result"]})
         if job["status"] == "error":
             error_payload = {"status": "error", "error": job.get("error")}
-            if job.get("error_detail"):
+            if EXPOSE_ERROR_DETAILS and job.get("error_detail"):
                 error_payload["detail"] = job["error_detail"]
             return JSONResponse(error_payload, status_code=500)
         return JSONResponse({"status": job["status"]})
@@ -286,7 +305,7 @@ def _cleanup_chunked_uploads(now: Optional[float] = None) -> None:
     for uid in expired:
         info = CHUNKED_UPLOADS.pop(uid, None)
         if info:
-            with contextlib.suppress(FileNotFoundError):
+            with contextlib.suppress(OSError):
                 os.remove(info["path"])
 
 
