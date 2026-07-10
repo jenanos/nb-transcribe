@@ -13,7 +13,6 @@ const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 const CHUNKED_UPLOAD_THRESHOLD = 1 * 1024 * 1024; // 1 MB – bruk chunked upload tidlig for å unngå 502 via proxy
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
 const POLL_MAX_RETRIES = 20;
-const CHUNK_MAX_RETRIES = 3;
 
 const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
 const MOCK_TRANSCRIPT =
@@ -79,29 +78,16 @@ export default function Home() {
       const chunkForm = new FormData();
       chunkForm.append("file", chunk, file.name);
 
-      let attempt = 0;
-      while (true) {
-        try {
-          const appendRes = await fetch(
-            `${baseUrl}/chunked/${upload_id}/append`,
-            { method: "POST", body: chunkForm, credentials: "include" }
-          );
-          if (appendRes.ok) {
-            break;
-          }
-          const isTransient = [502, 503, 504].includes(appendRes.status);
-          if (!isTransient || attempt >= CHUNK_MAX_RETRIES) {
-            const t = await appendRes.text();
-            throw new Error(`${appendRes.status} ${appendRes.statusText} – ${t}`);
-          }
-        } catch (err) {
-          const isNetworkError = err instanceof TypeError;
-          if (!isNetworkError || attempt >= CHUNK_MAX_RETRIES) {
-            throw err;
-          }
-        }
-        attempt++;
-        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+      // Ingen retry her: backend-appenden er ikke idempotent (ren fil-append
+      // uten offset), så et nytt forsøk etter tapt svar kan duplisere bytes
+      // og korrumpere lyden. Da er en ren feil bedre.
+      const appendRes = await fetch(
+        `${baseUrl}/chunked/${upload_id}/append`,
+        { method: "POST", body: chunkForm, credentials: "include" }
+      );
+      if (!appendRes.ok) {
+        const t = await appendRes.text();
+        throw new Error(`${appendRes.status} ${appendRes.statusText} – ${t}`);
       }
       offset = end;
     }

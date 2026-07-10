@@ -28,7 +28,10 @@ self.addEventListener("fetch", (event) => {
   const cachePut = (request, response) => {
     if (response && response.status === 200 && response.type === "basic") {
       const responseClone = response.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+      // waitUntil holder service workeren i live til cache-skrivingen er ferdig
+      event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone))
+      );
     }
     return response;
   };

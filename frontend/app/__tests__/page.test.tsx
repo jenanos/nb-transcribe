@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const jsonResponse = (payload: unknown, status = 200) =>
@@ -73,6 +73,32 @@ describe("Home page", () => {
     expect(
       screen.getByRole("button", { name: "Start transkribering" })
     ).toBeInTheDocument();
+  });
+
+  test("setter fil ved dra-og-slipp på opplastingsfeltet", () => {
+    setFetchMock(jest.fn());
+    render(<Home />);
+
+    const dropZone = screen
+      .getByText("Klikk for å velge fil eller dra og slipp")
+      .closest("label");
+    expect(dropZone).not.toBeNull();
+
+    const droppedFile = new File(["lyd"], "droppet-opptak.wav", { type: "audio/wav" });
+
+    // fireEvent returnerer false når preventDefault ble kalt – uten det
+    // ville nettleseren åpnet filen i stedet for å laste den opp.
+    const dragOverNotCancelled = fireEvent.dragOver(dropZone as HTMLElement, {
+      dataTransfer: { files: [droppedFile] },
+    });
+    expect(dragOverNotCancelled).toBe(false);
+
+    const dropNotCancelled = fireEvent.drop(dropZone as HTMLElement, {
+      dataTransfer: { files: [droppedFile] },
+    });
+    expect(dropNotCancelled).toBe(false);
+
+    expect(screen.getByText("droppet-opptak.wav")).toBeInTheDocument();
   });
 
   test("viser resultater etter polling", async () => {
