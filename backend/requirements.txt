@@ -1,8 +1,9 @@
 --extra-index-url https://download.pytorch.org/whl/cu118
+# TorchAudio extensions must use the same PyTorch release and CUDA wheel.
 torch==2.7.1+cu118
+torchaudio==2.7.1+cu118
 transformers>=4.35.2
 soundfile
-torchaudio
 pillow>=9.0.0
 fastapi
 uvicorn
