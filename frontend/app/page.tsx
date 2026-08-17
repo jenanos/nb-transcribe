@@ -216,7 +216,17 @@ export default function Home() {
         if (cancelled) return;
 
         if (data.status === "done") {
-          const raw = data?.result?.raw ?? "";
+          if (!data.result || typeof data.result.raw !== "string") {
+            throw new Error(
+              "Serveren markerte jobben som ferdig uten å returnere en transkripsjon. Prøv igjen."
+            );
+          }
+          const raw = data.result.raw;
+          if (!raw.trim()) {
+            throw new Error(
+              "Transkriberingen ble ferdig, men ingen tale ble gjenkjent i lydfilen."
+            );
+          }
           setResult({ raw });
           setLoading(false);
           setFlowState("results");

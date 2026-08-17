@@ -164,6 +164,57 @@ describe("Home page", () => {
     }
   });
 
+  test("viser feil hvis backend melder done uten resultat", async () => {
+    const user = userEvent.setup();
+    const originalFormData = globalThis.FormData;
+    class MockFormData {
+      private readonly store = new Map<string, unknown>();
+      append(key: string, value: unknown) {
+        this.store.set(key, value);
+      }
+    }
+    (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData =
+      MockFormData as unknown as typeof FormData;
+    const fetchMock = jest.fn();
+    setFetchMock(fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ job_id: "job-without-result" }, 202))
+      .mockResolvedValueOnce(jsonResponse({ status: "done", result: null }));
+
+    try {
+      render(<Home />);
+
+      const fileInput = screen.getByLabelText("Last opp lydfil");
+      await user.upload(
+        fileInput,
+        new File(["fake"], "test.wav", { type: "audio/wav" })
+      );
+      const form = screen
+        .getByRole("button", { name: "Start transkribering" })
+        .closest("form");
+      expect(form).not.toBeNull();
+      if (form) {
+        (form as HTMLFormElement).noValidate = true;
+        await act(async () => {
+          form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        });
+      }
+
+      expect(
+        await screen.findByText(
+          "Serveren markerte jobben som ferdig uten å returnere en transkripsjon. Prøv igjen."
+        )
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Resultater" })).not.toBeInTheDocument();
+    } finally {
+      if (originalFormData) {
+        (globalThis as typeof globalThis & { FormData: typeof FormData }).FormData = originalFormData;
+      } else {
+        Reflect.deleteProperty(globalThis as Record<string, unknown>, "FormData");
+      }
+    }
+  });
+
   test("uses chunked upload for files above 1 MB", async () => {
     jest.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });

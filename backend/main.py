@@ -207,9 +207,6 @@ def _submit_job(
     try:
         JOBS[job_id]["status"] = "running"
         result = run_transcribe_pipeline(file_path, job_id, original_filename=original_filename)
-        JOBS[job_id]["status"] = "done"
-        JOBS[job_id]["result"] = result
-        JOBS[job_id]["finished_at"] = time.time()
         metadata_for_db = result.get("metadata", metadata_for_db)
         save_transcription_record(
             job_id=job_id,
@@ -217,21 +214,38 @@ def _submit_job(
             metadata=metadata_for_db,
             status="done",
         )
+        # Publiser hele sluttresultatet i én dict-referanse. Hvis status settes
+        # til "done" før result, kan et samtidig GET-kall observere
+        # {status: "done", result: None} og frontenden avslutter pollingen med
+        # en tom transkripsjon.
+        JOBS[job_id] = {
+            **JOBS[job_id],
+            "status": "done",
+            "result": result,
+            "error": None,
+            "finished_at": time.time(),
+        }
     except Exception as e:
         error_message = str(e)
         error_traceback = traceback.format_exc()
-        JOBS[job_id]["status"] = "error"
-        JOBS[job_id]["error"] = error_message
-        JOBS[job_id]["error_detail"] = error_traceback
-        JOBS[job_id]["finished_at"] = time.time()
         logger.exception("Job %s feilet", job_id)
-        save_transcription_record(
-            job_id=job_id,
-            raw_text=None,
-            metadata=metadata_for_db,
-            status="error",
-            error_message=error_message,
-        )
+        try:
+            save_transcription_record(
+                job_id=job_id,
+                raw_text=None,
+                metadata=metadata_for_db,
+                status="error",
+                error_message=error_message,
+            )
+        finally:
+            JOBS[job_id] = {
+                **JOBS[job_id],
+                "status": "error",
+                "result": None,
+                "error": error_message,
+                "error_detail": error_traceback,
+                "finished_at": time.time(),
+            }
     finally:
         cleanup_jobs()
 
@@ -378,5 +392,3 @@ async def get_transcriptions(limit: int = 50):
     safe_limit = max(1, min(limit, 200))
     records = list_transcription_records(limit=safe_limit)
     return JSONResponse({"items": records})
-
-

@@ -208,3 +208,43 @@ def test_submit_job_handles_error(tmp_path: Path, patched_main, monkeypatch):
     assert job["status"] == "error"
     assert "boom" in job["error"]
     assert "finished_at" in job
+
+
+def test_submit_job_publishes_complete_result_atomically(
+    tmp_path: Path, patched_main, monkeypatch
+):
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"fake")
+
+    job_id = "job-success"
+    original_job = {
+        "status": "queued",
+        "result": None,
+        "error": None,
+        "created_at": time.time(),
+    }
+    patched_main.JOBS[job_id] = original_job
+    expected_result = {"raw": "ferdig tekst", "metadata": {"segment_count": 2}}
+
+    monkeypatch.setattr(
+        patched_main,
+        "run_transcribe_pipeline",
+        lambda *_args, **_kwargs: expected_result,
+    )
+
+    def assert_not_done_while_persisting(**_kwargs):
+        assert patched_main.JOBS[job_id]["status"] == "running"
+        assert patched_main.JOBS[job_id]["result"] is None
+
+    monkeypatch.setattr(
+        patched_main,
+        "save_transcription_record",
+        assert_not_done_while_persisting,
+    )
+
+    patched_main._submit_job(str(audio_path), job_id, "audio.wav")
+
+    assert original_job["status"] == "running"
+    assert patched_main.JOBS[job_id] is not original_job
+    assert patched_main.JOBS[job_id]["status"] == "done"
+    assert patched_main.JOBS[job_id]["result"] == expected_result
