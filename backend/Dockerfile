@@ -3,6 +3,7 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 # Installer systempakker
 RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC \
     apt-get install -y --no-install-recommends ffmpeg git python3 python3-pip tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
