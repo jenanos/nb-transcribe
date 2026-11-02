@@ -79,10 +79,25 @@ docker compose up --build
 ```
 
 - The backend container reads `HF_TOKEN` at startup to authenticate against Hugging Face.
-- The frontend is served on port 3000; the backend listens on port 8000 within the internal network.
+- The frontend is served on `http://127.0.0.1:3000`; the backend listens on port 8000 within the internal network.
 - A PostgreSQL 16 container called `db` keeps all transcription results. The backend connects via
   `DATABASE_URL=postgresql+psycopg://nbtranscribe:nbtranscribe@db:5432/nbtranscribe` by default in
   the Compose file.
+
+### Production (desktop)
+
+`compose.prod.yml` runs the prebuilt GHCR images. It expects the [infra](https://github.com/jenanos/infra)
+stack (Cloudflare Tunnel + Watchtower) to be running, because that stack owns the shared `edge` network.
+Only `transcribe-web` joins `edge`; the backend and database stay on the app's internal network.
+
+```bash
+cp .env.prod.example .env.prod   # fill in HF_TOKEN and POSTGRES_*
+docker compose -f compose.prod.yml --env-file .env.prod up -d
+```
+
+- Watchtower auto-updates `transcribe-web` and `transcribe-backend` when CI pushes new `:main` images.
+  Postgres is deliberately excluded and should be upgraded manually.
+- `scripts/backup-db.sh [dir]` writes a `pg_dump` of the production database (default `~/backups/nb-transcribe`).
 
 ## 🗃️ Database persistence
 
@@ -129,7 +144,9 @@ docker compose up --build
 .
 ├── backend/        # FastAPI app with transcription pipeline
 ├── frontend/       # Next.js 15 (App Router) UI
-└── docker-compose.yml
+├── scripts/        # Ops helpers (database backup)
+├── docker-compose.yml   # Local development (builds from source)
+└── compose.prod.yml     # Production on the desktop (GHCR images)
 ```
 
 ## 🤝 Contributing

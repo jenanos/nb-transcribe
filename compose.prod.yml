@@ -1,0 +1,92 @@
+# Produksjonsoppsett for desktopen. Bruker ferdigbygde images fra GHCR.
+# Forutsetter at infra-repoet kjører, fordi det eier nettverket `edge` og cloudflared.
+#
+#   docker compose -f compose.prod.yml --env-file .env.prod up -d
+name: nb-transcribe
+
+networks:
+  internal: {}
+  edge:
+    external: true
+    name: edge
+
+volumes:
+  db-data:
+    # Beholder navnet fra det gamle infra-oppsettet slik at eksisterende data gjenbrukes.
+    name: transcribe-db-data-desktop
+
+services:
+  web:
+    image: ghcr.io/jenanos/transcribe-frontend:main
+    # cloudflared når tjenesten via dette navnet (http://transcribe-web:3000)
+    container_name: transcribe-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      BACKEND_URL: http://transcribe-backend:8000
+    depends_on:
+      - backend
+    networks:
+      - internal
+      - edge
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    healthcheck:
+      # node:alpine har BusyBox-wget, men ikke curl
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  backend:
+    image: ghcr.io/jenanos/transcribe-backend:main
+    container_name: transcribe-backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      PORT: 8000
+      HF_TOKEN: ${HF_TOKEN:-}
+      MODEL_ID: ${MODEL_ID:-nb-whisper-large}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@transcribe-db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  db:
+    image: postgres:16
+    container_name: transcribe-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB mangler i .env.prod}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER mangler i .env.prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD mangler i .env.prod}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    # Ingen watchtower-label: databaseoppgraderinger gjøres manuelt.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
