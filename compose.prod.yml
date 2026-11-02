@@ -56,7 +56,11 @@ services:
       PORT: 8000
       HF_TOKEN: ${HF_TOKEN:-}
       MODEL_ID: ${MODEL_ID:-nb-whisper-large}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@transcribe-db:5432/${POSTGRES_DB}
+      # Backend bygger tilkoblings-URL-en selv (URL.create), så passordet trenger ikke URL-koding.
+      POSTGRES_HOST: transcribe-db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     depends_on:
       db:
         condition: service_healthy

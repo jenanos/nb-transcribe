@@ -20,5 +20,10 @@ docker exec "$CONTAINER" sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F
 mv "$tmp" "$file"
 echo "Backup skrevet til $file ($(du -h "$file" | cut -f1))"
 
-# Rydd eldre automatiske dumper (pre-migration-* o.l. røres ikke)
-ls -1t "$DEST"/nb-transcribe-*.dump 2>/dev/null | tail -n +"$((KEEP + 1))" | xargs -r rm --
+# Rydd eldre automatiske dumper (pre-migration-* o.l. røres ikke).
+# NUL-separert slik at stier med mellomrom forblir ett argument.
+find "$DEST" -maxdepth 1 -type f -name 'nb-transcribe-*.dump' -printf '%T@ %p\0' \
+  | sort -z -rn \
+  | tail -z -n +"$((KEEP + 1))" \
+  | cut -z -d' ' -f2- \
+  | xargs -0 -r rm --

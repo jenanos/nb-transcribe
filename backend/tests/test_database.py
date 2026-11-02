@@ -17,6 +17,7 @@ def clean_database(monkeypatch):
 
 def test_setup_database_skipped_without_url(clean_database, monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("POSTGRES_HOST", raising=False)
 
     clean_database.setup_database()
 
@@ -137,3 +138,29 @@ def test_get_missing_record_returns_none(clean_database, monkeypatch, tmp_path):
     clean_database.setup_database()
 
     assert clean_database.get_transcription_record("finnes-ikke") is None
+
+
+def test_database_url_built_from_postgres_parts_escapes_password(monkeypatch):
+    """Passord med URL-spesialtegn skal ikke ødelegge host/brukernavn i URL-en."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("POSTGRES_HOST", "transcribe-db")
+    monkeypatch.setenv("POSTGRES_USER", "postgres")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "p@ss:w/rd#1")
+    monkeypatch.setenv("POSTGRES_DB", "nb_transcribe")
+    monkeypatch.delenv("POSTGRES_PORT", raising=False)
+
+    url = database._database_url_from_env()
+
+    assert url.host == "transcribe-db"
+    assert url.port == 5432
+    assert url.username == "postgres"
+    assert url.password == "p@ss:w/rd#1"
+    assert url.database == "nb_transcribe"
+    assert url.drivername == "postgresql+psycopg"
+
+
+def test_database_url_env_takes_precedence(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///explicit.db")
+    monkeypatch.setenv("POSTGRES_HOST", "transcribe-db")
+
+    assert database._database_url_from_env() == "sqlite:///explicit.db"
