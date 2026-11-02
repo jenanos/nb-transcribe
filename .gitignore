@@ -3,6 +3,7 @@
 .env.*
 !frontend/.env.local.example
 !.env.example
+!.env.prod.example
 
 # OS / editor
 .DS_Store

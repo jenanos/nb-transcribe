@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from sqlalchemy import BigInteger, DateTime, Float, JSON, String, Text, create_engine
+from sqlalchemy import URL, BigInteger, DateTime, Float, JSON, String, Text, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -56,6 +56,34 @@ def _read_env_number(name: str, *, default, minimum, cast):
     return max(minimum, value)
 
 
+def _database_url_from_env() -> str | URL | None:
+    """Finner tilkoblings-URL fra miljøet.
+
+    ``DATABASE_URL`` vinner hvis den er satt. Ellers bygges URL-en fra
+    ``POSTGRES_HOST``/``POSTGRES_USER``/``POSTGRES_PASSWORD``/``POSTGRES_DB``
+    med ``URL.create``, slik at passord med tegn som ``@``, ``:`` eller ``/``
+    ikke må URL-kodes for hånd.
+    """
+
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        return database_url
+
+    host = os.environ.get("POSTGRES_HOST")
+    if not host:
+        return None
+
+    port = _read_env_number("POSTGRES_PORT", default=5432, minimum=1, cast=int)
+    return URL.create(
+        drivername="postgresql+psycopg",
+        username=os.environ.get("POSTGRES_USER"),
+        password=os.environ.get("POSTGRES_PASSWORD"),
+        host=host,
+        port=port,
+        database=os.environ.get("POSTGRES_DB"),
+    )
+
+
 def setup_database() -> None:
     """Initialises the database connection and creates tables when configured.
 
@@ -69,9 +97,9 @@ def setup_database() -> None:
     if _ENGINE is not None:
         return
 
-    database_url = os.environ.get("DATABASE_URL")
+    database_url = _database_url_from_env()
     if not database_url:
-        logger.info("DATABASE_URL not set; skipping database initialisation.")
+        logger.info("Neither DATABASE_URL nor POSTGRES_HOST set; skipping database initialisation.")
         return
 
     retries = _read_env_number("DATABASE_CONNECT_RETRIES", default=5, minimum=1, cast=int)

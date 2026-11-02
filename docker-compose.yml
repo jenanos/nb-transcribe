@@ -1,7 +1,9 @@
+# Lokal utvikling: bygger images fra kildekoden.
+# For produksjon på desktopen, se compose.prod.yml.
+name: nb-transcribe-dev
+
 networks:
   internal_app: {}
-  cf_edge:
-    external: true
 
 volumes:
   db-data: {}
@@ -9,7 +11,7 @@ volumes:
 services:
   backend:
     build: ./backend
-    container_name: nb-transcribe-backend
+    container_name: nb-transcribe-dev-backend
     environment:
       - HF_TOKEN=${HF_TOKEN}
       - DATABASE_URL=postgresql+psycopg://nbtranscribe:nbtranscribe@db:5432/nbtranscribe
@@ -21,22 +23,24 @@ services:
               count: all
               capabilities: [ gpu ]
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks: [internal_app]
 
   frontend:
     build: ./frontend
-    container_name: nb-transcribe-frontend
+    container_name: nb-transcribe-dev-frontend
     depends_on:
       - backend
     environment:
       - BACKEND_URL=http://backend:8000
-    networks: [internal_app, cf_edge]
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [internal_app]
 
   db:
     image: postgres:16
-    container_name: nb-transcribe-db
-    restart: unless-stopped
+    container_name: nb-transcribe-dev-db
     environment:
       POSTGRES_DB: nbtranscribe
       POSTGRES_USER: nbtranscribe
@@ -44,3 +48,8 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     networks: [internal_app]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nbtranscribe -d nbtranscribe"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
