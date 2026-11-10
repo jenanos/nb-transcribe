@@ -1,6 +1,5 @@
 import {
   BACKEND_BASE_URL,
-  MOCK_MODE,
   forwardResponse,
   withCloudflareAccessHeaders,
 } from "../../../../utils/backend";
@@ -13,15 +12,6 @@ export async function POST(
   { params }: { params: Promise<{ uploadId: string }> }
 ) {
   const { uploadId } = await params;
-
-  if (MOCK_MODE) {
-    const mockJobId =
-      "mock-job-" + Math.random().toString(36).slice(2, 8);
-    return new Response(
-      JSON.stringify({ job_id: mockJobId, status: "queued" }),
-      { status: 202, headers: { "content-type": "application/json" } }
-    );
-  }
 
   try {
     const upstream = await fetch(

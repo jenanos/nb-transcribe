@@ -1,7 +1,6 @@
 import {
   BACKEND_BASE_URL,
   type StreamingRequestInit,
-  MOCK_MODE,
   filterRequestHeaders,
   forwardResponse,
   withCloudflareAccessHeaders,
@@ -11,14 +10,6 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  if (MOCK_MODE) {
-    // Simulate job creation
-    const mockId = "mock-job-" + Math.random().toString(36).slice(2, 8);
-    return new Response(JSON.stringify({ job_id: mockId }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  }
   try {
     const init: StreamingRequestInit = {
       method: "POST",
