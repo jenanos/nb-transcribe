@@ -1,7 +1,6 @@
 import {
   BACKEND_BASE_URL,
   type StreamingRequestInit,
-  MOCK_MODE,
   filterRequestHeaders,
   forwardResponse,
   withCloudflareAccessHeaders,
@@ -15,13 +14,6 @@ export async function POST(
   { params }: { params: Promise<{ uploadId: string }> }
 ) {
   const { uploadId } = await params;
-
-  if (MOCK_MODE) {
-    return new Response(JSON.stringify({ status: "ok" }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  }
 
   try {
     const init: StreamingRequestInit = {

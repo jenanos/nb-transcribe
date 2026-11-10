@@ -52,13 +52,6 @@ npm run dev
 ```
 
 The Next.js app runs on `http://localhost:3000` and forwards API calls to `BACKEND_URL` (defaults to the backend started above).
-Toggle the mocked experience by setting `NEXT_PUBLIC_MOCK_MODE` to `1` in `.env.local`.
-
-## 🧪 Frontend mock mode
-
-- Copy `frontend/.env.local.example` to `.env.local` and keep `NEXT_PUBLIC_MOCK_MODE=1` to build the demo UI without a backend.
-- The file picker is pre-filled with a demo clip; uploading new audio is disabled and shows a short explainer.
-- Start the transcription straight away to see mocked raw outputs without backend access.
 
 ## 🧷 Useful commands
 
@@ -112,7 +105,7 @@ docker compose -f compose.prod.yml --env-file .env.prod up -d
 
 ## ⚙️ Configuration
 
-- `frontend/.env.local.example` – template for local/frontend deployments (mock mode flag and backend URL).
+- `frontend/.env.local.example` – template for local/frontend deployments (backend URL and Cloudflare Access credentials).
 - `backend/env.example` – template for backend deployments (Hugging Face token for NB-Whisper if required).
 - `DATABASE_URL` – optional PostgreSQL DSN consumed by SQLAlchemy to store transcription history.
 - `HF_TOKEN` – required when the NB-Whisper checkpoint needs authentication.
@@ -122,11 +115,9 @@ docker compose -f compose.prod.yml --env-file .env.prod up -d
   Docker/infra setups keep working.
 - `NEXT_PUBLIC_DIRECT_BACKEND_URL` – optional public URL for bypassing the Next.js proxy and
   streaming file uploads directly to FastAPI. Enable this when you need to send very large
-  audio files (10–30 minutes) that would otherwise hit the Vercel/serverless body limits.
+  audio files (10–30 minutes) that would otherwise hit proxy body limits.
   **Important:** Because uploads originate directly from the browser, the backend's CORS
   `allow_origins` list must include the domain where the frontend is hosted.
-- `NEXT_PUBLIC_MOCK_MODE` / `TRANSCRIBE_MOCK_MODE` – set to `1` to enable the fully mocked
-  UI without talking to the backend.
 
 ## ☁️ Cloudflare Access
 

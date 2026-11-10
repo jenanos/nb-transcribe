@@ -10,9 +10,6 @@ export const BACKEND_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8000";
 
-export const MOCK_MODE =
-  (process.env.NEXT_PUBLIC_MOCK_MODE ?? process.env.TRANSCRIBE_MOCK_MODE ?? "0").toString() === "1";
-
 const headersToObject = (headers?: HeadersInit): Record<string, string> => {
   if (!headers) {
     return {};

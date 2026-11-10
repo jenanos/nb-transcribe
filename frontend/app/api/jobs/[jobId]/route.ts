@@ -1,6 +1,5 @@
 import {
   BACKEND_BASE_URL,
-  MOCK_MODE,
   filterRequestHeaders,
   forwardResponse,
   withCloudflareAccessHeaders,
@@ -14,24 +13,6 @@ export async function GET(
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   const { jobId } = await params;
-
-  if (MOCK_MODE) {
-    const isDone = jobId?.toString().endsWith("a") || jobId?.toString().endsWith("0");
-    const payload = isDone
-      ? {
-          job_id: jobId,
-          status: "done",
-          result: {
-            raw: "Dette er en mock-transkripsjon fra NB-transcribe.",
-          },
-        }
-      : { job_id: jobId, status: "queued" };
-
-    return new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  }
 
   if (!jobId) {
     return new Response(

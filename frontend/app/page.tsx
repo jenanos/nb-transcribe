@@ -5,7 +5,6 @@ import CopyableEditableBox from "@/app/components/CopyableEditableBox";
 import ProcessingAnimation from "@/app/components/ProcessingAnimation";
 import bgImage from "@/public/nb-transcribe-background.png";
 
-const MOCK_MODE = (process.env.NEXT_PUBLIC_MOCK_MODE ?? "0").toString() === "1";
 const RAW_DIRECT_UPLOAD_BASE = process.env.NEXT_PUBLIC_DIRECT_BACKEND_URL ?? "";
 const DIRECT_UPLOAD_BASE = RAW_DIRECT_UPLOAD_BASE.trim().replace(/\/$/, "");
 const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
@@ -13,11 +12,6 @@ const HAS_DIRECT_UPLOAD = DIRECT_UPLOAD_BASE.length > 0;
 const CHUNKED_UPLOAD_THRESHOLD = 1 * 1024 * 1024; // 1 MB – bruk chunked upload tidlig for å unngå 502 via proxy
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
 const POLL_MAX_RETRIES = 20;
-
-const MOCK_SAMPLE_FILE_NAME = "demo-meeting.mp3";
-const MOCK_TRANSCRIPT =
-  "Dette er et eksempel på en transkripsjon fra NB-transcribe i mock-modus. Den faktiske backenden kjører lokalt " +
-  "på min egen maskin for å beskytte maskinvaren, men UI-et og API-kontraktene er identiske med den selvhostede versjonen.";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -27,8 +21,6 @@ export default function Home() {
   const [flowState, setFlowState] = useState<"idle" | "processing" | "results">("idle");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatusBaseUrl, setJobStatusBaseUrl] = useState<string | null>(null);
-  const [showMockInfo, setShowMockInfo] = useState(MOCK_MODE);
-  const [showMockUploadNotice, setShowMockUploadNotice] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,29 +30,6 @@ export default function Home() {
       pollTimeoutRef.current = null;
     }
   };
-
-  useEffect(() => {
-    if (!MOCK_MODE) {
-      return;
-    }
-
-    if (typeof window === "undefined" || typeof window.File === "undefined") {
-      return;
-    }
-
-    setFile((prev) => {
-      if (prev) {
-        return prev;
-      }
-      try {
-        // Minimal valid MP3 header (ID3 tag) as mock content
-        const mockMp3Header = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x76]);
-        return new File([mockMp3Header], MOCK_SAMPLE_FILE_NAME, { type: "audio/mpeg" });
-      } catch {
-        return prev;
-      }
-    });
-  }, []);
 
   async function uploadChunked(file: File, baseUrl: string): Promise<{ job_id: string }> {
     const initUrl = `${baseUrl}/chunked/init?filename=${encodeURIComponent(file.name)}`;
@@ -112,16 +81,6 @@ export default function Home() {
     setResult(null);
     setFlowState("processing");
 
-    if (MOCK_MODE) {
-      setTimeout(() => {
-        setResult({ raw: MOCK_TRANSCRIPT });
-        setLoading(false);
-        setFlowState("results");
-        setActiveJobId(null);
-      }, 3000); // Litt lenger tid for å vise animasjonen
-      return;
-    }
-
     const jobEndpointBase = HAS_DIRECT_UPLOAD ? `${DIRECT_UPLOAD_BASE}/jobs` : "/api/jobs";
     const useChunked = file.size > CHUNKED_UPLOAD_THRESHOLD;
 
@@ -159,9 +118,6 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (MOCK_MODE) {
-      return;
-    }
     if (!activeJobId) {
       clearPollTimeout();
       return;
@@ -266,16 +222,7 @@ export default function Home() {
   }, [activeJobId, jobStatusBaseUrl]);
 
   const handleReset = () => {
-    if (MOCK_MODE) {
-      try {
-        const mockMp3Header = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x76]);
-        setFile(new File([mockMp3Header], MOCK_SAMPLE_FILE_NAME, { type: "audio/mpeg" }));
-      } catch {
-        setFile(null);
-      }
-    } else {
-      setFile(null);
-    }
+    setFile(null);
     setResult(null);
     setFlowState("idle");
     setError(null);
@@ -289,57 +236,6 @@ export default function Home() {
         <Image src={bgImage} alt="Synthwave background" fill style={{ objectFit: "cover" }} />
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
       </div>
-
-      {showMockInfo && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mock-info-title"
-            className="max-w-2xl rounded-2xl border border-pink-500 bg-black/90 p-6 text-left shadow-[0_0_20px_#ff33a8]"
-          >
-            <h3 id="mock-info-title" className="font-orbitron text-2xl text-cyan-300 mb-3">Mock-modus aktivert</h3>
-            <p className="mb-3 text-sm text-gray-200">
-              Denne forhåndsvisningen kjører kun den synlige frontenden og simulerer svar fra backenden.
-              I produksjon er backenden selvhostet med NB-Whisper Large på GPU, men den holdes privat slik
-              at maskinvaren ikke eksponeres fra Vercel-demoen.
-            </p>
-            <p className="mb-4 text-sm text-gray-200">
-              UI-et, API-kontraktene og transkriberingsflyten er identiske med den ekte versjonen som jeg kjører
-              bak Cloudflare Tunnel. Du kan teste det visuelle her uten å ha tilgang til min backend.
-            </p>
-            <button
-              onClick={() => setShowMockInfo(false)}
-              className="rounded-lg bg-pink-500 px-4 py-2 font-bold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
-            >
-              Skjønner!
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showMockUploadNotice && (
-        <div className="fixed inset-0 z-30 flex items-start justify-center pointer-events-none">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mock-upload-title"
-            className="mt-24 w-full max-w-md rounded-xl border border-cyan-400 bg-black/90 p-5 text-sm text-gray-100 shadow-[0_0_15px_#00e5ff] pointer-events-auto"
-          >
-            <h4 id="mock-upload-title" className="font-orbitron text-lg text-cyan-300 mb-2">Filopplasting deaktivert i mock-modus</h4>
-            <p className="mb-3 text-gray-200">
-              Opplasting av egne filer er skrudd av her. Vi har forhåndslastet et eksempelklipp slik at du kan se
-              transkriberingsflyten uten backend-tilgang.
-            </p>
-            <button
-              onClick={() => setShowMockUploadNotice(false)}
-              className="rounded-lg bg-pink-500 px-3 py-2 font-semibold text-white shadow-[0_0_10px_#ff33a8] hover:bg-pink-600 transition"
-            >
-              Skjønner
-            </button>
-          </div>
-        </div>
-      )}
 
       <main className="flex-grow flex flex-col items-center p-6 pt-24 space-y-6">
         {/* Flashy tittel */}
@@ -365,21 +261,9 @@ export default function Home() {
               </label>
               <label
                 htmlFor="upload-file"
-                onClick={(event) => {
-                  if (MOCK_MODE) {
-                    event.preventDefault();
-                    setShowMockUploadNotice(true);
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (MOCK_MODE && (event.key === "Enter" || event.key === " ")) {
-                    event.preventDefault();
-                    setShowMockUploadNotice(true);
-                  }
-                }}
                 onDragOver={(event) => {
                   event.preventDefault();
-                  if (!MOCK_MODE && flowState !== "processing") {
+                  if (flowState !== "processing") {
                     setDragActive(true);
                   }
                 }}
@@ -387,10 +271,6 @@ export default function Home() {
                 onDrop={(event) => {
                   event.preventDefault();
                   setDragActive(false);
-                  if (MOCK_MODE) {
-                    setShowMockUploadNotice(true);
-                    return;
-                  }
                   if (flowState === "processing") {
                     return;
                   }
@@ -399,9 +279,6 @@ export default function Home() {
                     setFile(dropped);
                   }
                 }}
-                tabIndex={MOCK_MODE ? 0 : undefined}
-                role={MOCK_MODE ? "button" : undefined}
-                aria-disabled={MOCK_MODE ? "true" : "false"}
                 className={`mt-2 flex justify-center items-center px-6 py-5 border-2 border-dashed rounded-md cursor-pointer hover:border-cyan-400 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400 ${dragActive ? "border-cyan-400 bg-cyan-500/10" : "border-pink-400"
                   }`}
               >
@@ -415,8 +292,8 @@ export default function Home() {
                 accept="audio/*"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 className="hidden"
-                required={!MOCK_MODE}
-                disabled={MOCK_MODE || flowState === "processing"}
+                required
+                disabled={flowState === "processing"}
               />
             </div>
 

@@ -1,6 +1,5 @@
 import {
   BACKEND_BASE_URL,
-  MOCK_MODE,
   forwardResponse,
   withCloudflareAccessHeaders,
 } from "../../../utils/backend";
@@ -9,14 +8,6 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  if (MOCK_MODE) {
-    const mockId = "mock-upload-" + Math.random().toString(36).slice(2, 8);
-    return new Response(JSON.stringify({ upload_id: mockId }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  }
-
   try {
     const url = new URL(req.url);
     const filename = url.searchParams.get("filename");
